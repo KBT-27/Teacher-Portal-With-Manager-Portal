@@ -7,14 +7,19 @@ import {
   CheckCircle2, 
   Clock, 
   Trash2, 
-  QrCode,
-  Radio,
-  RefreshCw,
-  Eye,
-  XCircle
+  QrCode, 
+  Radio, 
+  RefreshCw, 
+  Eye, 
+  XCircle,
+  Sliders,
+  Timer,
+  Play,
+  Pause
 } from 'lucide-react';
-import { AttendanceSession, TeacherUser, BroadcastQR } from '../types';
+import { AttendanceSession, TeacherUser, BroadcastQR, AttendanceTimeSettings } from '../types';
 import { ConfirmDialog, ConfirmDialogState } from './ConfirmDialog';
+import { QRTimeAdjustmentModal } from './QRTimeAdjustmentModal';
 
 interface ManagerAttendanceViewProps {
   teachers?: TeacherUser[];
@@ -29,6 +34,10 @@ interface ManagerAttendanceViewProps {
   onStopQR?: () => void;
   onOpenKiosk?: () => void;
   todayDateStr?: string;
+  attendanceRules?: AttendanceTimeSettings;
+  onSaveAttendanceRules?: (rules: AttendanceTimeSettings) => void;
+  onUpdateBroadcastQR?: (qr: BroadcastQR) => void;
+  currentUser?: TeacherUser | null;
 }
 
 export const ManagerAttendanceView: React.FC<ManagerAttendanceViewProps> = ({
@@ -43,7 +52,26 @@ export const ManagerAttendanceView: React.FC<ManagerAttendanceViewProps> = ({
   onRegenerateTodayQR,
   onStopQR,
   onOpenKiosk,
-  todayDateStr = '2026-08-21'
+  todayDateStr = '2026-08-21',
+  attendanceRules = {
+    morningStart: '07:30 AM',
+    morningEnd: '09:30 AM',
+    lateThreshold: '08:15 AM',
+    createTime: '07:30',
+    lateTime: '08:15',
+    lateAfterMinutes: 15,
+    stopTime: '09:30',
+    qrDefaultExpiryMinutes: 120,
+    enforceOneScanPerDay: true,
+    gracePeriodMinutes: 15,
+    autoSendQREnabled: true,
+    autoSendTime: '07:30 AM',
+    broadcastTarget: 'single_kiosk_device',
+    targetDeviceName: 'School Entrance Terminal (Device #1)'
+  },
+  onSaveAttendanceRules = () => {},
+  onUpdateBroadcastQR,
+  currentUser
 }) => {
   const safeTeachers = (teachers && teachers.length > 0 ? teachers : users) || [];
   const effectiveBroadcastQR = broadcastQR || activeBroadcastQR || null;
@@ -51,6 +79,7 @@ export const ManagerAttendanceView: React.FC<ManagerAttendanceViewProps> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'late' | 'absent'>('all');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [isTimeModalOpen, setIsTimeModalOpen] = useState(false);
 
   // Confirmation dialog for clearing records
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
@@ -284,7 +313,64 @@ export const ManagerAttendanceView: React.FC<ManagerAttendanceViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* QR Timing & Threshold Adjustment Strip inside Manager Box */}
+        <div className="mt-6 pt-5 border-t border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span className="text-slate-400">Create / Post Time:</span>
+              <strong className="text-emerald-300 font-mono">
+                {effectiveBroadcastQR?.createTime || effectiveBroadcastQR?.postTime || attendanceRules.createTime || '07:30'}
+              </strong>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="text-slate-400">Late After:</span>
+              <strong className="text-amber-300 font-mono">
+                {effectiveBroadcastQR?.lateAfterMinutes !== undefined ? effectiveBroadcastQR.lateAfterMinutes : (attendanceRules.lateAfterMinutes ?? 15)} min
+              </strong>
+              <span className="text-slate-500 font-mono text-[11px]">
+                ({effectiveBroadcastQR?.lateTime || attendanceRules.lateTime || '08:15'})
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-rose-400" />
+              <span className="text-slate-400">Stop Time:</span>
+              <strong className="text-rose-300 font-mono">
+                {effectiveBroadcastQR?.stopTime || attendanceRules.stopTime || '09:30'}
+              </strong>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsTimeModalOpen(true)}
+            id="manager-adjust-qr-times-btn"
+            className="px-4 py-2 bg-blue-600/90 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border border-blue-400/30 shadow-xs hover:scale-[1.02]"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Adjust Create, Late & Stop Times</span>
+          </button>
+        </div>
       </div>
+
+      {/* QR Time Adjustment Modal */}
+      <QRTimeAdjustmentModal
+        isOpen={isTimeModalOpen}
+        onClose={() => setIsTimeModalOpen(false)}
+        currentUser={currentUser}
+        attendanceRules={attendanceRules}
+        onSaveRules={(newRules) => {
+          onSaveAttendanceRules(newRules);
+          showToast('Attendance timing & late threshold settings updated successfully!');
+        }}
+        broadcastQR={effectiveBroadcastQR}
+        onUpdateBroadcastQR={onUpdateBroadcastQR}
+        roleContext="manager"
+      />
 
       {/* KPI Cards: Present, Late, Absent, Total */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -9,19 +9,22 @@ import {
   Phone,
   BookOpen
 } from 'lucide-react';
-import { StudentItem, ClassItem } from '../types';
+import { StudentItem, ClassItem, TeacherUser } from '../types';
 
 interface StudentsViewProps {
+  currentUser?: TeacherUser;
   students: StudentItem[];
   classes: ClassItem[];
   onSaveStudents: (students: StudentItem[]) => void;
 }
 
 export const StudentsView: React.FC<StudentsViewProps> = ({
+  currentUser,
   students,
   classes,
   onSaveStudents
 }) => {
+  const isManager = currentUser?.role === 'manager';
   const [search, setSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -68,6 +71,10 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   };
 
   const handleDelete = (id: string) => {
+    if (!isManager) {
+      showToast('Permission Denied: Teachers and QR Code Mentors cannot erase student records.');
+      return;
+    }
     if (!confirm('Are you sure you want to remove this student?')) return;
     onSaveStudents(students.filter(s => s.id !== id));
     showToast('Student removed.');
@@ -199,13 +206,15 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
 
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">{s.grade || 'Grade 10'}</span>
-              <button
-                onClick={() => handleDelete(s.id)}
-                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
-                title="Remove Student"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {isManager && (
+                <button
+                  onClick={() => handleDelete(s.id)}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
+                  title="Manager: Erase Student"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         ))}

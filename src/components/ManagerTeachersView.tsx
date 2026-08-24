@@ -764,15 +764,15 @@ export const ManagerTeachersView: React.FC<ManagerTeachersViewProps> = ({
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">
-                    {editingTeacher ? 'New Password (Optional)' : 'Unique Password *'}
+                    {editingTeacher ? 'Current / New Password *' : 'Account Password *'}
                   </label>
                   <input
                     type="text"
                     required={!editingTeacher}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={editingTeacher ? 'Leave blank to keep' : 'password123'}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={editingTeacher ? 'Enter real password' : 'password123'}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>

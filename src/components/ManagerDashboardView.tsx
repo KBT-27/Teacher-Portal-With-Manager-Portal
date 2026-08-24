@@ -209,13 +209,16 @@ export const ManagerDashboardView: React.FC<ManagerDashboardViewProps> = ({
         </div>
 
         {/* Password Reset Requests Queue Metric */}
-        <div className={`p-5 rounded-2xl border shadow-xs transition-all ${
-          pendingPasswordResets.length > 0 
-            ? 'bg-rose-50/70 border-rose-300 ring-2 ring-rose-400/20' 
-            : 'bg-white border-slate-200'
-        }`}>
+        <div 
+          onClick={() => onNavigateTab('manager_password_resets')}
+          className={`p-5 rounded-2xl border shadow-xs transition-all cursor-pointer hover:shadow-md ${
+            pendingPasswordResets.length > 0 
+              ? 'bg-rose-50/70 border-rose-300 ring-2 ring-rose-400/20 hover:bg-rose-100/70' 
+              : 'bg-white border-slate-200 hover:bg-slate-50'
+          }`}
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Account Recovery</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Forgetting Requests</span>
             <KeyRound className={`w-4 h-4 ${pendingPasswordResets.length > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
           </div>
           <div className="mt-2 flex items-baseline justify-between">

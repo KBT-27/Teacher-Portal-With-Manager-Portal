@@ -10,45 +10,48 @@ import {
   SubmissionItem, 
   MaterialItem, 
   ManagerFeedback, 
-  Announcement,
-  PasswordResetRequest,
-  BroadcastQR,
-  ActiveTab
+  Announcement, 
+  PasswordResetRequest, 
+  BroadcastQR, 
+  ActiveTab,
+  AttendanceTimeSettings
 } from './types';
-import {
-  loadUsers,
-  saveUsers,
-  loadAttendanceRecords,
-  saveAttendanceRecords,
-  loadDepartments,
-  saveDepartments,
-  loadClasses,
-  saveClasses,
-  loadStudents,
-  saveStudents,
-  loadTimetable,
-  saveTimetable,
-  loadAssignments,
-  saveAssignments,
-  loadSubmissions,
-  saveSubmissions,
-  loadMaterials,
-  saveMaterials,
-  loadFeedback,
-  saveFeedback,
-  loadAnnouncements,
-  saveAnnouncements,
-  loadPasswordResetRequests,
-  savePasswordResetRequests,
-  loadBroadcastQR,
-  saveBroadcastQR,
-  loadCurrentUser,
-  saveCurrentUser,
-  loadMainGateLocked,
-  saveMainGateLocked,
-  clearAllAttendanceRecords,
-  getSavedSchoolName,
-  saveSchoolName,
+import { 
+  loadUsers, 
+  saveUsers, 
+  loadAttendanceRecords, 
+  saveAttendanceRecords, 
+  loadDepartments, 
+  saveDepartments, 
+  loadClasses, 
+  saveClasses, 
+  loadStudents, 
+  saveStudents, 
+  loadTimetable, 
+  saveTimetable, 
+  loadAssignments, 
+  saveAssignments, 
+  loadSubmissions, 
+  saveSubmissions, 
+  loadMaterials, 
+  saveMaterials, 
+  loadFeedback, 
+  saveFeedback, 
+  loadAnnouncements, 
+  saveAnnouncements, 
+  loadPasswordResetRequests, 
+  savePasswordResetRequests, 
+  loadBroadcastQR, 
+  saveBroadcastQR, 
+  loadCurrentUser, 
+  saveCurrentUser, 
+  loadMainGateLocked, 
+  saveMainGateLocked, 
+  clearAllAttendanceRecords, 
+  getSavedSchoolName, 
+  saveSchoolName, 
+  loadAttendanceRules,
+  saveAttendanceRules,
   storage
 } from './lib/storage';
 import { hashPassword } from './lib/utils';
@@ -60,6 +63,7 @@ import { Sidebar } from './components/Sidebar';
 import { ManagerDashboardView } from './components/ManagerDashboardView';
 import { ManagerAttendanceView } from './components/ManagerAttendanceView';
 import { ManagerTeachersView } from './components/ManagerTeachersView';
+import { ManagerPasswordResetsView } from './components/ManagerPasswordResetsView';
 import { ManagerDepartmentsView } from './components/ManagerDepartmentsView';
 import { QRStationPortalView } from './components/QRStationPortalView';
 import { SchoolEntranceKioskModal } from './components/SchoolEntranceKioskModal';
@@ -99,6 +103,7 @@ export function App() {
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => loadAnnouncements());
   const [passwordResets, setPasswordResets] = useState<PasswordResetRequest[]>(() => loadPasswordResetRequests());
   const [broadcastQR, setBroadcastQR] = useState<BroadcastQR | null>(() => loadBroadcastQR());
+  const [attendanceRules, setAttendanceRules] = useState<AttendanceTimeSettings>(() => loadAttendanceRules());
   const [isStationLocked, setIsStationLocked] = useState<boolean>(() => loadMainGateLocked());
   const [isAutoCreateQREnabled, setIsAutoCreateQREnabled] = useState<boolean>(() => storage.getAutoCreateQREnabled());
   const [schoolName, setSchoolName] = useState<string>(() => getSavedSchoolName());
@@ -111,6 +116,18 @@ export function App() {
     if (user.role === 'qr_station') return 'qr_station';
     return 'dashboard';
   });
+
+  // Ensure QR station role or locked station stays exclusively on qr_station tab
+  useEffect(() => {
+    if (currentUser?.role === 'qr_station' && activeTab !== 'qr_station') {
+      setActiveTab('qr_station');
+    } else if (
+      currentUser?.role === 'teacher' && 
+      ['students', 'assignments', 'submissions', 'grades'].includes(activeTab)
+    ) {
+      setActiveTab('dashboard');
+    }
+  }, [currentUser, activeTab]);
 
   // Modals
   const [isKioskOpen, setIsKioskOpen] = useState(false);
@@ -179,6 +196,10 @@ export function App() {
   }, [broadcastQR]);
 
   useEffect(() => {
+    saveAttendanceRules(attendanceRules);
+  }, [attendanceRules]);
+
+  useEffect(() => {
     saveMainGateLocked(isStationLocked);
   }, [isStationLocked]);
 
@@ -225,7 +246,11 @@ export function App() {
       expiresAt: timestamp + 24 * 60 * 60 * 1000, // Valid for today
       generatedByRole: 'manager',
       isActive: true,
-      label: "Main Gate - Entrance Station #1 Official QR"
+      label: "Main Gate - Entrance Station #1 Official QR",
+      createTime: attendanceRules.createTime || '07:30',
+      lateTime: attendanceRules.lateTime || '08:15',
+      lateAfterMinutes: attendanceRules.lateAfterMinutes ?? 15,
+      stopTime: attendanceRules.stopTime || '09:30'
     };
 
     setBroadcastQR(newQR);
@@ -252,7 +277,11 @@ export function App() {
       expiresAt: timestamp + 24 * 60 * 60 * 1000,
       generatedByRole: 'manager',
       isActive: true,
-      label: "Main Gate - Entrance Station #1 Official QR (Updated)"
+      label: "Main Gate - Entrance Station #1 Official QR (Updated)",
+      createTime: attendanceRules.createTime || '07:30',
+      lateTime: attendanceRules.lateTime || '08:15',
+      lateAfterMinutes: attendanceRules.lateAfterMinutes ?? 15,
+      stopTime: attendanceRules.stopTime || '09:30'
     };
 
     setBroadcastQR(updatedQR);
@@ -272,15 +301,19 @@ export function App() {
           expiresAt: timestamp + 24 * 60 * 60 * 1000,
           generatedByRole: 'manager',
           isActive: true,
-          label: "Main Gate - Entrance Station #1 Official QR (Auto)"
+          label: "Main Gate - Entrance Station #1 Official QR (Auto)",
+          createTime: attendanceRules.createTime || '07:30',
+          lateTime: attendanceRules.lateTime || '08:15',
+          lateAfterMinutes: attendanceRules.lateAfterMinutes ?? 15,
+          stopTime: attendanceRules.stopTime || '09:30'
         };
         setBroadcastQR(autoQR);
       }
     }
   }, [isAutoCreateQREnabled, todayDateStr]);
 
-  // Teacher QR Scan Attendance Logging (Strict 1 scan/day limit)
-  const handleScanAttendance = (scannedToken: string): boolean => {
+  // Teacher QR Scan & Manual Link Attendance Logging (Strict 1 scan/day limit)
+  const handleScanAttendance = (scannedToken: string, method: 'qr' | 'link' = 'qr'): boolean => {
     if (!currentUser || currentUser.role !== 'teacher') return false;
 
     // Check if teacher has already scanned today
@@ -293,11 +326,60 @@ export function App() {
       return false;
     }
 
+    // Check if session has reached stop time
     const now = new Date();
+    const stopTimeStr = broadcastQR.stopTime || attendanceRules.stopTime;
+    if (stopTimeStr) {
+      const [stopH, stopM] = stopTimeStr.split(':').map(Number);
+      if (!isNaN(stopH) && !isNaN(stopM)) {
+        const currentMins = now.getHours() * 60 + now.getMinutes();
+        const stopMins = stopH * 60 + stopM;
+        if (currentMins >= stopMins) {
+          // Attendance session has closed
+          return false;
+        }
+      }
+    }
+
+    // Verify token matches active manager broadcast token
+    const cleanToken = (scannedToken || '').trim();
+    if (!cleanToken) return false;
+
+    const baseToken = broadcastQR.token;
+    const isTokenMatch = 
+      cleanToken === baseToken || 
+      cleanToken.includes(baseToken) || 
+      (baseToken && cleanToken.startsWith('EDUSCHOOL-MGR-') && cleanToken.includes(todayDateStr)) ||
+      (broadcastQR.id && cleanToken.includes(broadcastQR.id));
+
+    if (!isTokenMatch) {
+      return false;
+    }
+
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const checkInTime = `${hours}:${minutes} ${now.getHours() >= 12 ? 'PM' : 'AM'}`;
-    const isLate = now.getHours() > 8 || (now.getHours() === 8 && now.getMinutes() > 30);
+
+    // Timing rules: Present within lateAfterMinutes of QR generation / before lateTime; Late after lateAfterMinutes
+    const sessionStartTime = broadcastQR.generatedAt || broadcastQR.createdAt || Date.now();
+    const elapsedMinutes = (Date.now() - sessionStartTime) / (1000 * 60);
+    const lateThresholdMinutes = broadcastQR.lateAfterMinutes !== undefined 
+      ? broadcastQR.lateAfterMinutes 
+      : (attendanceRules.lateAfterMinutes ?? 15);
+
+    let isLateByClock = false;
+    const lateTimeStr = broadcastQR.lateTime || attendanceRules.lateTime;
+    if (lateTimeStr) {
+      const [lateH, lateM] = lateTimeStr.split(':').map(Number);
+      if (!isNaN(lateH) && !isNaN(lateM)) {
+        const currentMins = now.getHours() * 60 + now.getMinutes();
+        const lateMins = lateH * 60 + lateM;
+        if (currentMins > lateMins) {
+          isLateByClock = true;
+        }
+      }
+    }
+    const isLate = elapsedMinutes > lateThresholdMinutes || isLateByClock;
 
     const newAttendanceSession: AttendanceSession = {
       id: `att-${Date.now()}`,
@@ -305,10 +387,12 @@ export function App() {
       teacherName: currentUser.name,
       date: todayDateStr,
       checkInTime,
-      checkInMethod: 'qr',
+      checkInMethod: method,
       status: isLate ? 'late' : 'present',
       qrStationId: 'station-main-entrance',
-      note: 'Verified via Main Gate Entrance QR Terminal #1'
+      note: method === 'link' 
+        ? 'Verified via Mentor Attendance Direct Link' 
+        : 'Verified via Main Gate Entrance QR Terminal #1'
     };
 
     setAttendanceRecords(prev => [newAttendanceSession, ...prev]);
@@ -430,7 +514,12 @@ export function App() {
 
     setUsers(prev => prev.map(u => {
       if (u.employeeId === req.teacherId || u.email === req.email) {
-        return { ...u, passwordHash: newHash };
+        return { 
+          ...u, 
+          passwordHash: newHash,
+          rawPassword: newPwd,
+          currentPassword: newPwd
+        };
       }
       return u;
     }));
@@ -564,6 +653,9 @@ export function App() {
               onStopQR={handleStopQR}
               onOpenKiosk={() => setIsKioskOpen(true)}
               todayDateStr={todayDateStr}
+              attendanceRules={attendanceRules}
+              onSaveAttendanceRules={setAttendanceRules}
+              onUpdateBroadcastQR={setBroadcastQR}
             />
           )}
 
@@ -575,6 +667,17 @@ export function App() {
               passwordResets={passwordResets}
               onApprovePasswordReset={handleApprovePasswordReset}
               onRejectPasswordReset={handleRejectPasswordReset}
+            />
+          )}
+
+          {activeTab === 'manager_password_resets' && currentUser.role === 'manager' && (
+            <ManagerPasswordResetsView
+              requests={passwordResets}
+              teachers={users}
+              onApproveRequest={handleApprovePasswordReset}
+              onRejectRequest={handleRejectPasswordReset}
+              onSaveRequests={setPasswordResets}
+              onRequestPasswordReset={handleRequestPasswordReset}
             />
           )}
 
@@ -609,6 +712,9 @@ export function App() {
                 setIsAutoCreateQREnabled(val);
                 storage.saveAutoCreateQREnabled(val);
               }}
+              attendanceRules={attendanceRules}
+              onSaveAttendanceRules={setAttendanceRules}
+              onUpdateBroadcastQR={setBroadcastQR}
             />
           )}
 
@@ -635,6 +741,7 @@ export function App() {
               teachers={users}
               broadcastQR={broadcastQR}
               onOpenScanner={() => setIsScannerOpen(true)}
+              onScanSuccess={handleScanAttendance}
               alreadyScannedToday={hasTeacherScannedToday}
               todayDateStr={todayDateStr}
               onEraseAttendance={() => {
@@ -654,6 +761,7 @@ export function App() {
 
           {activeTab === 'students' && (
             <StudentsView
+              currentUser={currentUser}
               students={students}
               classes={classes}
               onSaveStudents={setStudents}
@@ -670,6 +778,7 @@ export function App() {
 
           {activeTab === 'assignments' && (
             <AssignmentsView
+              currentUser={currentUser}
               assignments={assignments}
               classes={classes}
               onSaveAssignments={setAssignments}
@@ -678,9 +787,13 @@ export function App() {
 
           {activeTab === 'submissions' && (
             <SubmissionsView
+              currentUser={currentUser}
               submissions={submissions}
               onGradeSubmission={(id, score, feedback) => {
                 setSubmissions(prev => prev.map(s => s.id === id ? { ...s, score, feedback } : s));
+              }}
+              onDeleteSubmission={(id) => {
+                setSubmissions(prev => prev.filter(s => s.id !== id));
               }}
             />
           )}

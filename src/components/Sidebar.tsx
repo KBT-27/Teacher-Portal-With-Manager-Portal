@@ -20,7 +20,8 @@ import {
   ShieldCheck,
   Radio,
   Lock,
-  School
+  School,
+  KeyRound
 } from 'lucide-react';
 import { TeacherUser, BroadcastQR } from '../types';
 
@@ -64,6 +65,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   );
 
   const handleTabClick = (tab: string) => {
+    if (isStation && tab !== 'qr_station') {
+      return;
+    }
+    if (isStationLocked && tab !== 'qr_station') {
+      alert('Station is currently locked in Kiosk mode. Please unlock the station to access other modules.');
+      return;
+    }
     onSelectTab(tab);
     onCloseMobile();
   };
@@ -150,8 +158,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <Users className="w-4 h-4" />
                     <span>Teacher Passwords & IDs</span>
                   </div>
+                </button>
+
+                <button
+                  onClick={() => handleTabClick('manager_password_resets')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'manager_password_resets' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <KeyRound className="w-4 h-4" />
+                    <span>Forgetting Requests</span>
+                  </div>
                   {pendingPasswordResetCount > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-bold">
+                    <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-bold animate-pulse">
                       {pendingPasswordResetCount}
                     </span>
                   )}
@@ -263,18 +283,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
 
                 <button
-                  onClick={() => handleTabClick('students')}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'students' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <GraduationCap className="w-4 h-4" />
-                    <span>Students</span>
-                  </div>
-                </button>
-
-                <button
                   onClick={() => handleTabClick('timetable')}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
                     activeTab === 'timetable' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -283,42 +291,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="flex items-center space-x-2.5">
                     <Calendar className="w-4 h-4" />
                     <span>Schedule</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleTabClick('assignments')}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <FileText className="w-4 h-4" />
-                    <span>Assignments</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleTabClick('submissions')}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'submissions' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <FileText className="w-4 h-4" />
-                    <span>Submissions</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleTabClick('grades')}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'grades' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Award className="w-4 h-4" />
-                    <span>Grades</span>
                   </div>
                 </button>
 
@@ -336,64 +308,68 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </>
             )}
 
-            {/* Common System Links */}
-            <div className="px-3 pt-3 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-              System
-            </div>
+            {/* Common System Links - Hidden for QR Station / Lock to prevent leaving kiosk */}
+            {!isStation && (
+              <>
+                <div className="px-3 pt-3 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  System
+                </div>
 
-            <button
-              onClick={() => handleTabClick('announcements')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'announcements' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Megaphone className="w-4 h-4" />
-                <span>Announcements</span>
-              </div>
-            </button>
+                <button
+                  onClick={() => handleTabClick('announcements')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'announcements' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <Megaphone className="w-4 h-4" />
+                    <span>Announcements</span>
+                  </div>
+                </button>
 
-            <button
-              onClick={() => handleTabClick('reports')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'reports' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <BarChart3 className="w-4 h-4" />
-                <span>Reports</span>
-              </div>
-            </button>
+                <button
+                  onClick={() => handleTabClick('reports')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'reports' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <BarChart3 className="w-4 h-4" />
+                    <span>Reports</span>
+                  </div>
+                </button>
 
-            <button
-              onClick={() => handleTabClick('settings')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'settings' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Settings className="w-4 h-4" />
-                <span>Settings</span>
-              </div>
-            </button>
+                <button
+                  onClick={() => handleTabClick('settings')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'settings' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <Settings className="w-4 h-4" />
+                    <span>Settings</span>
+                  </div>
+                </button>
 
-            <button
-              onClick={() => handleTabClick('profile')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === 'profile' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <User className="w-4 h-4" />
-                <span>Profile</span>
-              </div>
-            </button>
+                <button
+                  onClick={() => handleTabClick('profile')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
+                    activeTab === 'profile' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <User className="w-4 h-4" />
+                    <span>Profile</span>
+                  </div>
+                </button>
+              </>
+            )}
           </nav>
         </div>
 
         {/* Bottom User Card & Station Quick Access */}
         <div className="p-3 border-t border-slate-800 space-y-2">
-          {onOpenKiosk && (
+          {!isTeacher && onOpenKiosk && (
             <button
               onClick={onOpenKiosk}
               className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-2"

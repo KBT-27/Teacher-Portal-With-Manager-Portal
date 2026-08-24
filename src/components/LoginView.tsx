@@ -14,7 +14,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import { TeacherUser, NavTab, PasswordResetRequest } from '../types';
-import { hashPassword, fastHash } from '../lib/utils';
+import { hashPassword, fastHash, getTeacherRealPassword } from '../lib/utils';
 
 interface LoginViewProps {
   teachers?: TeacherUser[];
@@ -127,8 +127,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
       if (isQRStation) {
         const targetStation = safeTeachers.find(t => t.role === 'qr_station') || defaultQrStationUser;
+        const realPwd = getTeacherRealPassword(targetStation);
         const expectedHash = targetStation.passwordHash || fastHash('Qr code 123');
-        const directMatch = trimmedPwd === 'Qr code 123' || trimmedPwd.toLowerCase() === 'qr code 123';
+        const directMatch = trimmedPwd === realPwd || trimmedPwd === 'Qr code 123' || trimmedPwd.toLowerCase() === 'qr code 123' || (targetStation.rawPassword && trimmedPwd === targetStation.rawPassword) || (targetStation.currentPassword && trimmedPwd === targetStation.currentPassword);
         const hashMatch = expectedHash === inputHash || expectedHash === inputFastHash;
 
         if (directMatch || hashMatch) {
@@ -148,8 +149,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
       if (isManager) {
         const targetMgr = safeTeachers.find(t => t.role === 'manager') || managerUser;
+        const realPwd = getTeacherRealPassword(targetMgr);
         const expectedHash = targetMgr.passwordHash || fastHash('Manager 123');
-        const directMatch = trimmedPwd === 'Manager 123' || trimmedPwd.toLowerCase() === 'manager 123';
+        const directMatch = trimmedPwd === realPwd || trimmedPwd === 'Manager 123' || trimmedPwd.toLowerCase() === 'manager 123' || (targetMgr.rawPassword && trimmedPwd === targetMgr.rawPassword) || (targetMgr.currentPassword && trimmedPwd === targetMgr.currentPassword);
         const hashMatch = expectedHash === inputHash || expectedHash === inputFastHash;
 
         if (directMatch || hashMatch) {
@@ -168,6 +170,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       );
 
       if (foundTeacher) {
+        const realPwd = getTeacherRealPassword(foundTeacher);
         const expectedHash = foundTeacher.passwordHash;
         const validSeeds: Record<string, string> = {
           'TCH-8492': 'teach123',
@@ -177,7 +180,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         };
 
         const seedPass = validSeeds[foundTeacher.employeeId];
-        const directSeedMatch = seedPass && trimmedPwd === seedPass;
+        const directSeedMatch = (seedPass && trimmedPwd === seedPass) || trimmedPwd === realPwd || (foundTeacher.rawPassword && trimmedPwd === foundTeacher.rawPassword) || (foundTeacher.currentPassword && trimmedPwd === foundTeacher.currentPassword);
         const hashMatch = expectedHash && (expectedHash === inputHash || expectedHash === inputFastHash || expectedHash === fastHash(trimmedPwd));
 
         if (directSeedMatch || hashMatch) {

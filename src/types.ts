@@ -42,10 +42,14 @@ export interface DepartmentItem {
 export type Department = DepartmentItem;
 
 export interface AttendanceTimeSettings {
-  morningStart: string; // e.g. "07:30 AM"
-  morningEnd: string; // e.g. "09:30 AM"
-  lateThreshold: string; // e.g. "08:15 AM"
-  qrDefaultExpiryMinutes: number; // e.g. 45
+  morningStart: string; // e.g. "07:30 AM" or "07:30" (Create Time / Post Time)
+  morningEnd: string; // e.g. "09:30 AM" or "09:30" (Stop Time)
+  lateThreshold: string; // e.g. "08:15 AM" or "08:15" (Late Time Cutoff)
+  createTime?: string; // e.g. "07:30" or "07:30 AM"
+  lateTime?: string; // e.g. "08:15" or "08:15 AM"
+  lateAfterMinutes?: number; // e.g. 15 (Present within first X minutes, Late after X minutes)
+  stopTime?: string; // e.g. "09:30" or "09:30 AM"
+  qrDefaultExpiryMinutes: number; // e.g. 120
   enforceOneScanPerDay: boolean;
   gracePeriodMinutes: number;
   autoSendQREnabled: boolean;
@@ -62,6 +66,11 @@ export interface BroadcastQR {
   generatedDate: string; // "YYYY-MM-DD"
   createdAt?: number;
   generatedAt?: number;
+  postTime?: string; // e.g. "07:30 AM" or "07:30" (Create Time)
+  createTime?: string; // e.g. "07:30" or "07:30 AM"
+  lateTime?: string; // e.g. "08:15" or "08:15 AM"
+  lateAfterMinutes?: number; // e.g. 15 (minutes from start)
+  stopTime?: string; // e.g. "09:30 AM" or "09:30"
   expiresAt: number;
   durationMinutes?: number;
   isActive: boolean;
@@ -285,6 +294,7 @@ export type NavTab =
   | 'audit'
   | 'manager_dashboard'
   | 'manager_teachers'
+  | 'manager_password_resets'
   | 'manager_departments'
   | 'manager_attendance'
   | 'qr_station'

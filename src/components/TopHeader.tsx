@@ -38,6 +38,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 }) => {
   const isManager = currentUser.role === 'manager';
   const isStation = currentUser.role === 'qr_station';
+  const isTeacher = currentUser.role === 'teacher';
   const isTodayQRActive = Boolean(
     broadcastQR && 
     broadcastQR.isActive && 
@@ -97,15 +98,17 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </div>
           )}
 
-          {/* Station Kiosk Launch Button */}
-          <button
-            onClick={onOpenKiosk}
-            className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-            title="Open Entrance Station #1 Screen"
-          >
-            <QrCode className="w-3.5 h-3.5 text-blue-400" />
-            <span>Entrance Kiosk</span>
-          </button>
+          {/* Station Kiosk Launch Button (Only for Manager / Station) */}
+          {!isTeacher && (isManager || isStation) && onOpenKiosk && (
+            <button
+              onClick={onOpenKiosk}
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              title="Open Entrance Station #1 Screen"
+            >
+              <QrCode className="w-3.5 h-3.5 text-blue-400" />
+              <span>Entrance Kiosk</span>
+            </button>
+          )}
 
           {/* User Info & Avatar */}
           <div className="flex items-center space-x-2.5 pl-2 border-l border-slate-200">

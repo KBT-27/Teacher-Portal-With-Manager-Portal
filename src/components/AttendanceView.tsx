@@ -14,8 +14,13 @@ import {
   Building,
   ShieldCheck,
   Camera,
-  XCircle
+  XCircle,
+  Link as LinkIcon,
+  ArrowRight,
+  Copy,
+  Check
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { TeacherUser, AttendanceSession, BroadcastQR } from '../types';
 import { ConfirmDialog, ConfirmDialogState } from './ConfirmDialog';
 
@@ -26,6 +31,7 @@ interface AttendanceViewProps {
   teachers?: TeacherUser[];
   broadcastQR?: BroadcastQR | null;
   onOpenScanner?: () => void;
+  onScanSuccess?: (scannedText: string, method?: 'qr' | 'link') => boolean | void;
   alreadyScannedToday?: boolean;
   todayDateStr?: string;
   onEraseAttendance?: () => void;
@@ -38,6 +44,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   teachers = [],
   broadcastQR,
   onOpenScanner = () => {},
+  onScanSuccess,
   alreadyScannedToday = false,
   todayDateStr = '2026-08-21',
   onEraseAttendance = () => {}
@@ -47,6 +54,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   const [rosterSearch, setRosterSearch] = useState('');
   const [rosterStatusFilter, setRosterStatusFilter] = useState<'all' | 'present' | 'late' | 'absent'>('all');
   
+  // Manual link entry state
+  const [manualLinkInput, setManualLinkInput] = useState('');
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
     isOpen: false,
     title: '',
@@ -62,6 +74,46 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       confirmText,
       onConfirm
     });
+  };
+
+  const handleManualLinkCheckIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLinkError(null);
+
+    const input = manualLinkInput.trim();
+    if (!input) {
+      setLinkError('Please enter or paste the attendance link.');
+      return;
+    }
+
+    if (alreadyScannedToday) {
+      setWarningToast('You have already checked in for today.');
+      return;
+    }
+
+    // Extract code
+    let cleanCode = input;
+    if (input.includes('code=')) {
+      const match = input.match(/[?&]code=([^&]+)/);
+      if (match && match[1]) {
+        cleanCode = decodeURIComponent(match[1]);
+      }
+    }
+
+    if (onScanSuccess) {
+      const result = onScanSuccess(cleanCode, 'link');
+      if (result === false) {
+        setLinkError('Invalid or expired attendance link. Please verify with your mentor/manager.');
+      } else {
+        setSuccessToast('Check-in successfully recorded via attendance link!');
+        setManualLinkInput('');
+        confetti({
+          particleCount: 70,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+      }
+    }
   };
 
   // Dynamic Month & Year Navigation (Default: August 2026)
@@ -307,13 +359,15 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   </div>
                 </div>
               ) : (
-                <button
-                  onClick={onOpenScanner}
-                  className="w-full px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-bold shadow-lg shadow-blue-500/30 transition-all cursor-pointer flex items-center justify-center gap-2.5 hover:scale-[1.02]"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>Open Camera to Scan Today's QR</span>
-                </button>
+                <div className="flex flex-col sm:flex-row lg:flex-col gap-2 w-full">
+                  <button
+                    onClick={onOpenScanner}
+                    className="w-full px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-bold shadow-lg shadow-blue-500/30 transition-all cursor-pointer flex items-center justify-center gap-2.5 hover:scale-[1.02]"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>Open Camera to Scan Today's QR</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -339,15 +393,93 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         </div>
       )}
 
-      {/* SECTION 2: 4 SUMMARY METRIC CARDS */}
+      {/* ========================================================================= */}
+      {/* MANUAL LINK ENTRY CARD (Exact user requested layout) */}
+      {/* ========================================================================= */}
+      {currentUser.role === 'teacher' && !alreadyScannedToday && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-5">
+          <div className="border-b border-slate-100 pb-3">
+            <h3 className="text-xl font-black text-slate-900 tracking-tight">
+              Manual link entry
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Paste the attendance link your mentor shared to check in.
+            </p>
+          </div>
+
+          {linkError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>{linkError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleManualLinkCheckIn} className="space-y-4 max-w-2xl">
+            <div className="relative">
+              <LinkIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                required
+                value={manualLinkInput}
+                onChange={(e) => setManualLinkInput(e.target.value)}
+                placeholder="https://…/attendance?code=…"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer flex items-center gap-2"
+              >
+                <span>Check in with link</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenScanner}
+                className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Camera className="w-4 h-4 text-slate-600" />
+                <span>Or use Camera Scanner</span>
+              </button>
+            </div>
+          </form>
+
+          {/* Attendance Rules Window */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 max-w-2xl space-y-2 text-xs">
+            <div className="space-y-1.5 text-slate-700">
+              <p className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <span><strong>Present:</strong> within the first 15 minutes.</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                <span><strong>Late:</strong> after 15 minutes but before the session closes.</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                <span><strong>Absent:</strong> no valid scan before closing.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 2: SUMMARY METRIC CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Present</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {currentUser.role === 'teacher' ? 'My Present Days' : 'Present'}
+            </span>
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-black text-slate-900 font-mono">{totalPresentFaculty}</span>
+            <span className="text-3xl font-black text-slate-900 font-mono">
+              {currentUser.role === 'teacher' ? personalPresentCount : totalPresentFaculty}
+            </span>
             <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
               On-Time
             </span>
@@ -356,11 +488,15 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Late</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {currentUser.role === 'teacher' ? 'My Late Days' : 'Late'}
+            </span>
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-black text-slate-900 font-mono">{totalLateFaculty}</span>
+            <span className="text-3xl font-black text-slate-900 font-mono">
+              {currentUser.role === 'teacher' ? personalLateCount : totalLateFaculty}
+            </span>
             <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
               Check-In
             </span>
@@ -369,13 +505,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Absent</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {currentUser.role === 'teacher' ? 'My Absent Days' : 'Absent'}
+            </span>
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-black text-rose-600 font-mono">{totalAbsentFaculty}</span>
+            <span className="text-3xl font-black text-rose-600 font-mono">
+              {currentUser.role === 'teacher' ? personalAbsentCount : totalAbsentFaculty}
+            </span>
             <span className="text-xs font-medium text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full">
-              Absent Roster
+              {currentUser.role === 'teacher' ? 'Unrecorded' : 'Absent Roster'}
             </span>
           </div>
         </div>
@@ -386,152 +526,156 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             <Sparkles className="w-4 h-4 text-indigo-600" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-black text-indigo-600 font-mono">{facultyAttendanceRate}%</span>
+            <span className="text-3xl font-black text-indigo-600 font-mono">
+              {currentUser.role === 'teacher' ? attendanceRate : facultyAttendanceRate}%
+            </span>
             <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">
-              {facultyCount} Faculty
+              {currentUser.role === 'teacher' ? `${totalClasses} Days Logged` : `${facultyCount} Faculty`}
             </span>
           </div>
         </div>
       </div>
 
-      {/* SECTION 3: TODAY'S FACULTY ATTENDANCE ROSTER TABLE */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center space-x-2">
-              <Users className="w-5 h-5 text-indigo-600" />
-              <h2 className="text-lg font-black text-slate-900">Today's Faculty Attendance Roster</h2>
+      {/* SECTION 3: ROSTER TABLE (ONLY FOR MANAGERS - HIDDEN FROM TEACHERS) */}
+      {currentUser.role === 'manager' && (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <Users className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-lg font-black text-slate-900">Today's Faculty Attendance Roster</h2>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Live status for all school faculty members on {todayDateStr}
+              </p>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Live status for all school faculty members on {todayDateStr}
-            </p>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  placeholder="Search faculty..."
+                  className="w-full sm:w-48 pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                <button
+                  onClick={() => setRosterStatusFilter('all')}
+                  className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                    rosterStatusFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  All ({facultyCount})
+                </button>
+                <button
+                  onClick={() => setRosterStatusFilter('present')}
+                  className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                    rosterStatusFilter === 'present' ? 'bg-emerald-600 text-white shadow-xs' : 'text-emerald-700'
+                  }`}
+                >
+                  Present ({totalPresentFaculty})
+                </button>
+                <button
+                  onClick={() => setRosterStatusFilter('late')}
+                  className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                    rosterStatusFilter === 'late' ? 'bg-amber-500 text-white shadow-xs' : 'text-amber-700'
+                  }`}
+                >
+                  Late ({totalLateFaculty})
+                </button>
+                <button
+                  onClick={() => setRosterStatusFilter('absent')}
+                  className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                    rosterStatusFilter === 'absent' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-700'
+                  }`}
+                >
+                  Absent ({totalAbsentFaculty})
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={rosterSearch}
-                onChange={(e) => setRosterSearch(e.target.value)}
-                placeholder="Search faculty..."
-                className="w-full sm:w-48 pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold">
-              <button
-                onClick={() => setRosterStatusFilter('all')}
-                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                  rosterStatusFilter === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                All ({facultyCount})
-              </button>
-              <button
-                onClick={() => setRosterStatusFilter('present')}
-                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                  rosterStatusFilter === 'present' ? 'bg-emerald-600 text-white shadow-xs' : 'text-emerald-700'
-                }`}
-              >
-                Present ({totalPresentFaculty})
-              </button>
-              <button
-                onClick={() => setRosterStatusFilter('late')}
-                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                  rosterStatusFilter === 'late' ? 'bg-amber-500 text-white shadow-xs' : 'text-amber-700'
-                }`}
-              >
-                Late ({totalLateFaculty})
-              </button>
-              <button
-                onClick={() => setRosterStatusFilter('absent')}
-                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
-                  rosterStatusFilter === 'absent' ? 'bg-rose-600 text-white shadow-xs' : 'text-rose-700'
-                }`}
-              >
-                Absent ({totalAbsentFaculty})
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
-              <tr>
-                <th className="py-3 px-5">Faculty Member</th>
-                <th className="py-3 px-5">Department & Subject</th>
-                <th className="py-3 px-5">Employee ID</th>
-                <th className="py-3 px-5">Check-In Time</th>
-                <th className="py-3 px-5">Verification Gate</th>
-                <th className="py-3 px-5 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredRoster.map(({ member, log, status }) => {
-                const isCurrentUser = member.employeeId === currentUser.employeeId || member.name === currentUser.name;
-                
-                return (
-                  <tr key={member.id} className={`hover:bg-slate-50/70 transition-colors ${isCurrentUser ? 'bg-blue-50/40' : ''}`}>
-                    <td className="py-3.5 px-5">
-                      <div className="flex items-center space-x-3">
-                        <img
-                          src={member.avatarUrl || member.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                          alt={member.name}
-                          className="w-8 h-8 rounded-xl object-cover border border-slate-200 shrink-0"
-                        />
-                        <div>
-                          <p className="font-bold text-slate-900 flex items-center gap-1.5">
-                            <span>{member.name}</span>
-                            {isCurrentUser && (
-                              <span className="px-1.5 py-0.2 bg-blue-100 text-blue-700 text-[9px] font-bold rounded">
-                                You
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-[10px] text-slate-500">{member.role === 'teacher' ? 'Faculty Member' : 'Academic Administration'}</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider text-[10px] font-bold">
+                <tr>
+                  <th className="py-3 px-5">Faculty Member</th>
+                  <th className="py-3 px-5">Department & Subject</th>
+                  <th className="py-3 px-5">Employee ID</th>
+                  <th className="py-3 px-5">Check-In Time</th>
+                  <th className="py-3 px-5">Verification Gate</th>
+                  <th className="py-3 px-5 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredRoster.map(({ member, log, status }) => {
+                  const isCurrentUser = member.employeeId === currentUser.employeeId || member.name === currentUser.name;
+                  
+                  return (
+                    <tr key={member.id} className={`hover:bg-slate-50/70 transition-colors ${isCurrentUser ? 'bg-blue-50/40' : ''}`}>
+                      <td className="py-3.5 px-5">
+                        <div className="flex items-center space-x-3">
+                          <img
+                            src={member.avatarUrl || member.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                            alt={member.name}
+                            className="w-8 h-8 rounded-xl object-cover border border-slate-200 shrink-0"
+                          />
+                          <div>
+                            <p className="font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>{member.name}</span>
+                              {isCurrentUser && (
+                                <span className="px-1.5 py-0.2 bg-blue-100 text-blue-700 text-[9px] font-bold rounded">
+                                  You
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[10px] text-slate-500">{member.role === 'teacher' ? 'Faculty Member' : 'Academic Administration'}</p>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <p className="font-bold text-slate-800">{member.subject || member.subjects?.[0] || 'Faculty'}</p>
-                      <p className="text-[10px] text-slate-400">{member.department || 'General Faculty'}</p>
-                    </td>
-                    <td className="py-3.5 px-5 font-mono text-slate-600 font-semibold">
-                      {member.employeeId}
-                    </td>
-                    <td className="py-3.5 px-5 font-mono text-slate-700">
-                      {log?.checkInTime || '--:--'}
-                    </td>
-                    <td className="py-3.5 px-5 text-slate-500 text-[11px]">
-                      {log?.checkInMethod === 'qr' ? 'Terminal #1 (Entrance QR)' : log ? 'Manager Manual Override' : 'Awaiting Check-in'}
-                    </td>
-                    <td className="py-3.5 px-5 text-right">
-                      {status === 'present' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>Present</span>
-                        </span>
-                      ) : status === 'late' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase">
-                          <Clock className="w-3 h-3" />
-                          <span>Late</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold uppercase">
-                          <XCircle className="w-3 h-3" />
-                          <span>Absent</span>
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <p className="font-bold text-slate-800">{member.subject || member.subjects?.[0] || 'Faculty'}</p>
+                        <p className="text-[10px] text-slate-400">{member.department || 'General Faculty'}</p>
+                      </td>
+                      <td className="py-3.5 px-5 font-mono text-slate-600 font-semibold">
+                        {member.employeeId}
+                      </td>
+                      <td className="py-3.5 px-5 font-mono text-slate-700">
+                        {log?.checkInTime || '--:--'}
+                      </td>
+                      <td className="py-3.5 px-5 text-slate-500 text-[11px]">
+                        {log?.checkInMethod === 'qr' ? 'Terminal #1 (Entrance QR)' : log ? 'Manager Manual Override' : 'Awaiting Check-in'}
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        {status === 'present' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Present</span>
+                          </span>
+                        ) : status === 'late' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase">
+                            <Clock className="w-3 h-3" />
+                            <span>Late</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold uppercase">
+                            <XCircle className="w-3 h-3" />
+                            <span>Absent</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* SECTION 4: TEACHER'S PERSONAL MONTHLY ATTENDANCE CALENDAR */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">

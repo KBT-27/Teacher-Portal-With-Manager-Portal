@@ -30,12 +30,18 @@ import {
   X,
   Radio,
   Eye,
-  EyeOff
+  EyeOff,
+  Link as LinkIcon,
+  Copy,
+  Check,
+  Sliders,
+  Timer
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
-import { TeacherUser, AttendanceSession, NavTab, BroadcastQR } from '../types';
+import { TeacherUser, AttendanceSession, NavTab, BroadcastQR, AttendanceTimeSettings } from '../types';
 import { storage } from '../lib/storage';
 import { fastHash, hashPassword } from '../lib/utils';
+import { QRTimeAdjustmentModal } from './QRTimeAdjustmentModal';
 
 interface QRStationPortalViewProps {
   currentUser: TeacherUser;
@@ -57,6 +63,9 @@ interface QRStationPortalViewProps {
   onStopQR?: () => void;
   isAutoCreateQREnabled?: boolean;
   onToggleAutoCreateQR?: (enabled: boolean) => void;
+  attendanceRules?: AttendanceTimeSettings;
+  onSaveAttendanceRules?: (rules: AttendanceTimeSettings) => void;
+  onUpdateBroadcastQR?: (qr: BroadcastQR) => void;
 }
 
 export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
@@ -75,7 +84,25 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
   onRegenerateTodayQR,
   onStopQR,
   isAutoCreateQREnabled = true,
-  onToggleAutoCreateQR
+  onToggleAutoCreateQR,
+  attendanceRules = {
+    morningStart: '07:30 AM',
+    morningEnd: '09:30 AM',
+    lateThreshold: '08:15 AM',
+    createTime: '07:30',
+    lateTime: '08:15',
+    lateAfterMinutes: 15,
+    stopTime: '09:30',
+    qrDefaultExpiryMinutes: 120,
+    enforceOneScanPerDay: true,
+    gracePeriodMinutes: 15,
+    autoSendQREnabled: true,
+    autoSendTime: '07:30 AM',
+    broadcastTarget: 'single_kiosk_device',
+    targetDeviceName: 'School Entrance Terminal (Device #1)'
+  },
+  onSaveAttendanceRules = () => {},
+  onUpdateBroadcastQR
 }) => {
   const safeTeachers = (teachers && teachers.length > 0 ? teachers : users) || [];
   const effectiveBroadcastQR = activeBroadcastQR || broadcastQR || null;
@@ -105,6 +132,10 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
 
   // Auto Create QR Local Toggle
   const [autoCreateEnabled, setAutoCreateEnabled] = useState<boolean>(() => storage.getAutoCreateQREnabled());
+
+  // Direct Attendance Link Copy State
+  const [copiedDirectLink, setCopiedDirectLink] = useState<boolean>(false);
+  const [isTimeModalOpen, setIsTimeModalOpen] = useState<boolean>(false);
 
   // Scanner Simulator / Camera State
   const [isStationCameraActive, setIsStationCameraActive] = useState(false);
@@ -369,6 +400,83 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
                   {schoolName} • Attendance Gate Terminal
                 </p>
               </div>
+
+              {/* Direct Link at the bottom of QR */}
+              {(() => {
+                const currentDynamicToken = effectiveBroadcastQR?.token 
+                  ? `${effectiveBroadcastQR.token}#SLOT_${slotIndex}` 
+                  : '';
+                const directLinkUrl = typeof window !== 'undefined'
+                  ? `${window.location.origin}/attendance?code=${encodeURIComponent(currentDynamicToken || effectiveBroadcastQR?.token || '')}`
+                  : `https://abunegorgorios.edu/attendance?code=${encodeURIComponent(currentDynamicToken || effectiveBroadcastQR?.token || '')}`;
+                
+                const lateMin = effectiveBroadcastQR?.lateAfterMinutes !== undefined 
+                  ? effectiveBroadcastQR.lateAfterMinutes 
+                  : (attendanceRules.lateAfterMinutes ?? 15);
+                const stopT = effectiveBroadcastQR?.stopTime || attendanceRules.stopTime || '09:30';
+
+                return (
+                  <div 
+                    onClick={(e) => e.stopPropagation()} 
+                    className="max-w-md w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-3.5 space-y-2 text-left shadow-lg mx-auto"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
+                        <LinkIcon className="w-3.5 h-3.5" />
+                        <span>Attendance Direct Link (15s Dynamic Sync)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(directLinkUrl);
+                          setCopiedDirectLink(true);
+                          setTimeout(() => setCopiedDirectLink(false), 2000);
+                        }}
+                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedDirectLink ? <Check className="w-3 h-3 text-slate-950" /> : <Copy className="w-3 h-3 text-slate-950" />}
+                        <span>{copiedDirectLink ? 'Copied' : 'Copy Link'}</span>
+                      </button>
+                    </div>
+
+                    <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-mono text-slate-300 break-all select-all">
+                      {directLinkUrl}
+                    </div>
+
+                    {/* Timing Rules Window */}
+                    <div className="pt-1 text-[10px] space-y-1 text-slate-400 border-t border-slate-800">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        <span><strong>Present:</strong> within the first {lateMin} minutes.</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        <span><strong>Late:</strong> after {lateMin} minutes but before the session closes ({stopT}).</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                        <span><strong>Absent:</strong> no valid scan before closing ({stopT}).</span>
+                      </div>
+                    </div>
+
+                    {/* Mentor Time Adjustment Trigger */}
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400">
+                        Config: {effectiveBroadcastQR?.createTime || attendanceRules.createTime || '07:30'} → {effectiveBroadcastQR?.lateTime || attendanceRules.lateTime || '08:15'} ({lateMin}m) → {stopT}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsTimeModalOpen(true)}
+                        id="mentor-adjust-times-btn"
+                        className="px-2.5 py-1 bg-blue-600/90 hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 border border-blue-400/30"
+                      >
+                        <Sliders className="w-3 h-3" />
+                        <span>Adjust Time</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="p-8 bg-slate-900/80 rounded-3xl border border-slate-800 text-center max-w-md space-y-4">
@@ -383,46 +491,6 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
               </div>
             </div>
           )}
-
-          {/* Quick Simulated Teacher Scan Picker (for testing scans while locked) */}
-          <div 
-            onClick={(e) => e.stopPropagation()} 
-            className="w-full max-w-lg bg-slate-900/90 p-4 rounded-2xl border border-slate-800/80 space-y-2.5 text-left"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
-                <Smartphone className="w-3.5 h-3.5 text-amber-400" />
-                <span>Simulate Arriving Teacher Scan / Badge Tap:</span>
-              </span>
-              <span className="text-[10px] text-slate-500 font-mono">
-                {totalCheckedIn}/{facultyTeachers.length} Checked In
-              </span>
-            </div>
-            
-            <div className="flex gap-2">
-              <select
-                id="locked-station-teacher-picker"
-                disabled={!isQrValidForToday}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    handlePerformStationScan(e.target.value, 'present');
-                    e.target.value = '';
-                  }
-                }}
-                className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-              >
-                <option value="">-- Tap Faculty Member to Scan --</option>
-                {facultyTeachers.map(t => {
-                  const isChecked = todayRecords.some(r => r.teacherId === t.employeeId || r.teacherName === t.name);
-                  return (
-                    <option key={t.id} value={t.employeeId}>
-                      {isChecked ? '✓ ' : '○ '} {t.name} ({t.employeeId}) {isChecked ? '[Already Checked In]' : ''}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
         </div>
 
         {/* Bottom Banner */}
@@ -747,7 +815,7 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
             </div>
 
             {isQrValidForToday && qrDataUrl ? (
-              <div className="space-y-4">
+              <div className="space-y-4 max-w-lg w-full">
                 <div className="p-4 bg-slate-900 rounded-3xl shadow-xl border-4 border-amber-500/30 inline-block">
                   <img
                     src={qrDataUrl}
@@ -758,6 +826,53 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
                 <p className="text-xs text-slate-500 font-medium">
                   Refreshes every 15 seconds to prevent static photo sharing
                 </p>
+
+                {/* Direct Link Box */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2.5 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <LinkIcon className="w-4 h-4 text-amber-600" />
+                      <span>Mentor Attendance Direct Link</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const shareLink = typeof window !== 'undefined'
+                          ? `${window.location.origin}/attendance?code=${encodeURIComponent(effectiveBroadcastQR?.token || '')}`
+                          : `https://abunegorgorios.edu/attendance?code=${effectiveBroadcastQR?.token || ''}`;
+                        navigator.clipboard.writeText(shareLink);
+                        setCopiedDirectLink(true);
+                        setTimeout(() => setCopiedDirectLink(false), 2000);
+                      }}
+                      className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      {copiedDirectLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedDirectLink ? 'Copied' : 'Copy Link'}</span>
+                    </button>
+                  </div>
+
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-700 break-all select-all">
+                    {typeof window !== 'undefined'
+                      ? `${window.location.origin}/attendance?code=${effectiveBroadcastQR?.token || 'TOKEN'}`
+                      : `https://abunegorgorios.edu/attendance?code=${effectiveBroadcastQR?.token || 'TOKEN'}`}
+                  </div>
+
+                  {/* Timing Rules */}
+                  <div className="pt-2 text-xs space-y-1 text-slate-600 border-t border-slate-200/80">
+                    <p className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <span><strong>Present:</strong> within the first 15 minutes.</span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <span><strong>Late:</strong> after 15 minutes but before the session closes.</span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                      <span><strong>Absent:</strong> no valid scan before closing.</span>
+                    </p>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="py-12 px-6 text-center space-y-4 max-w-md">
@@ -1228,6 +1343,20 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* QR Timing & Threshold Adjustment Modal for Station Mentor */}
+      <QRTimeAdjustmentModal
+        isOpen={isTimeModalOpen}
+        onClose={() => setIsTimeModalOpen(false)}
+        currentUser={currentUser}
+        attendanceRules={attendanceRules}
+        onSaveRules={(newRules) => {
+          onSaveAttendanceRules(newRules);
+        }}
+        broadcastQR={effectiveBroadcastQR}
+        onUpdateBroadcastQR={onUpdateBroadcastQR}
+        roleContext="mentor"
+      />
     </div>
   );
 };

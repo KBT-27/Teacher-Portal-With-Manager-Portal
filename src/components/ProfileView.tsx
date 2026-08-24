@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   User, 
   Mail, 
@@ -60,6 +60,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showRealPasswordBadge, setShowRealPasswordBadge] = useState(false);
+
+  useEffect(() => {
+    const pwd = getTeacherRealPassword(currentUser);
+    setCurrentPassword(pwd);
+  }, [currentUser]);
 
   // Toast / Feedback
   const [toastMsg, setToastMsg] = useState<string | null>(null);

@@ -111,60 +111,80 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             )}
           </div>
 
-          <form onSubmit={handleSaveSchoolName} className="space-y-3 pt-2">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Official School / Academy Name *
-              </label>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <input
-                  type="text"
-                  required
-                  value={editSchoolName}
-                  onChange={(e) => {
-                    setEditSchoolName(e.target.value);
-                    setIsSaved(false);
-                  }}
-                  placeholder="e.g. EduSchool International Academy"
-                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  type="submit"
-                  className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>{isSaved ? 'Saved!' : 'Save School Name'}</span>
-                </button>
+          {currentUser.role === 'manager' ? (
+            <form onSubmit={handleSaveSchoolName} className="space-y-3 pt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Official School / Academy Name *
+                </label>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={editSchoolName}
+                    onChange={(e) => {
+                      setEditSchoolName(e.target.value);
+                      setIsSaved(false);
+                    }}
+                    placeholder="e.g. EduSchool International Academy"
+                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="submit"
+                    className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSaved ? 'Saved!' : 'Save School Name'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick preset suggestions */}
+              <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  Quick Presets:
+                </span>
+                {[
+                  'EduSchool International Academy',
+                  'Oakridge Science & Arts Academy',
+                  'Metropolitan STEM High School',
+                  'St. Jude Preparatory College'
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => handlePresetSelect(preset)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
+                      editSchoolName === preset 
+                        ? 'bg-blue-50 border-blue-300 text-blue-800' 
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </form>
+          ) : (
+            <div className="pt-2 space-y-3">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current Registered School Name</span>
+                  <p className="text-sm font-black text-slate-900 mt-0.5">{schoolName}</p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold uppercase">
+                  Read Only
+                </span>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 flex items-center gap-2 text-xs text-amber-900">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  Institutional Identity & School Name is locked. Only the <strong>Academic Manager</strong> is authorized to edit or change the institutional name.
+                </span>
               </div>
             </div>
-
-            {/* Quick preset suggestions */}
-            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                Quick Presets:
-              </span>
-              {[
-                'EduSchool International Academy',
-                'Oakridge Science & Arts Academy',
-                'Metropolitan STEM High School',
-                'St. Jude Preparatory College'
-              ].map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => handlePresetSelect(preset)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
-                    editSchoolName === preset 
-                      ? 'bg-blue-50 border-blue-300 text-blue-800' 
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-          </form>
+          )}
         </div>
 
         {/* 2. General Preferences */}

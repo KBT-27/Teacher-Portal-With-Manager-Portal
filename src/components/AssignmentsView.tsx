@@ -9,19 +9,22 @@ import {
   Trash2,
   Users
 } from 'lucide-react';
-import { AssignmentItem, ClassItem } from '../types';
+import { AssignmentItem, ClassItem, TeacherUser } from '../types';
 
 interface AssignmentsViewProps {
+  currentUser?: TeacherUser;
   assignments: AssignmentItem[];
   classes: ClassItem[];
   onSaveAssignments: (assignments: AssignmentItem[]) => void;
 }
 
 export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
+  currentUser,
   assignments,
   classes,
   onSaveAssignments
 }) => {
+  const isManager = currentUser?.role === 'manager';
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -61,6 +64,10 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
   };
 
   const handleDelete = (id: string) => {
+    if (!isManager) {
+      showToast('Permission Denied: Teachers and QR Code Mentors cannot erase assignments.');
+      return;
+    }
     if (!confirm('Are you sure you want to remove this assignment?')) return;
     onSaveAssignments(assignments.filter(a => a.id !== id));
     showToast('Assignment removed.');
@@ -170,13 +177,15 @@ export const AssignmentsView: React.FC<AssignmentsViewProps> = ({
               }`}>
                 {asg.status || 'Active'}
               </span>
-              <button
-                onClick={() => handleDelete(asg.id)}
-                className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
-                title="Remove Assignment"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {isManager && (
+                <button
+                  onClick={() => handleDelete(asg.id)}
+                  className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
+                  title="Manager: Erase Assignment"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         ))}

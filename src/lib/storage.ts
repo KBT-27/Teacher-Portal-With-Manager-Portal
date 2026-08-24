@@ -61,6 +61,8 @@ const GRADES_KEY = 'eduschool_grades_v9';
 const PASSWORD_RESETS_KEY = 'eduschool_pwd_resets_v9';
 const STATION_LOCK_KEY = 'eduschool_main_gate_locked_v9';
 const AUTO_CREATE_QR_KEY = 'eduschool_auto_create_qr_v9';
+const STATION_UNLOCK_PASSWORD_KEY = 'eduschool_station_unlock_pwd_v9';
+const AUTO_POST_STOP_SCHEDULE_KEY = 'eduschool_auto_post_stop_schedule_v9';
 
 export function initializeStorage() {
   if (!localStorage.getItem(TEACHERS_KEY)) {
@@ -220,7 +222,16 @@ export function getSavedAttendanceRules(): AttendanceTimeSettings {
     const raw = localStorage.getItem(ATTENDANCE_RULES_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === 'object') {
+        return {
+          ...INITIAL_ATTENDANCE_RULES,
+          ...parsed,
+          createTime: parsed.createTime || parsed.morningStart || INITIAL_ATTENDANCE_RULES.createTime,
+          lateTime: parsed.lateTime || parsed.lateThreshold || INITIAL_ATTENDANCE_RULES.lateTime,
+          lateAfterMinutes: parsed.lateAfterMinutes !== undefined ? parsed.lateAfterMinutes : INITIAL_ATTENDANCE_RULES.lateAfterMinutes,
+          stopTime: parsed.stopTime || parsed.morningEnd || INITIAL_ATTENDANCE_RULES.stopTime
+        };
+      }
     }
   } catch (e) {
     console.error(e);
@@ -675,8 +686,73 @@ export function saveAutoCreateQREnabled(enabled: boolean) {
   }
 }
 
+export function getSavedStationUnlockPassword(): string {
+  try {
+    const raw = localStorage.getItem(STATION_UNLOCK_PASSWORD_KEY);
+    if (raw) return raw;
+  } catch (e) {
+    console.error(e);
+  }
+  return 'admin123';
+}
+
+export function saveStationUnlockPassword(pwd: string) {
+  try {
+    localStorage.setItem(STATION_UNLOCK_PASSWORD_KEY, pwd || 'admin123');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+export interface AutoPostStopSchedule {
+  enabled: boolean;
+  postTime: string; // e.g. "07:30"
+  stopTime: string; // e.g. "09:30"
+  durationMinutes: number; // e.g. 120
+}
+
+export function getSavedAutoPostStopSchedule(): AutoPostStopSchedule {
+  try {
+    const raw = localStorage.getItem(AUTO_POST_STOP_SCHEDULE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          enabled: parsed.enabled ?? true,
+          postTime: parsed.postTime || '07:30',
+          stopTime: parsed.stopTime || '09:30',
+          durationMinutes: parsed.durationMinutes || 120
+        };
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  return {
+    enabled: true,
+    postTime: '07:30',
+    stopTime: '09:30',
+    durationMinutes: 120
+  };
+}
+
+export function saveAutoPostStopSchedule(schedule: AutoPostStopSchedule) {
+  try {
+    localStorage.setItem(AUTO_POST_STOP_SCHEDULE_KEY, JSON.stringify(schedule));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+export const getStationUnlockPassword = getSavedStationUnlockPassword;
+export const setStationUnlockPassword = saveStationUnlockPassword;
+export const getAutoPostStopSchedule = getSavedAutoPostStopSchedule;
+export const setAutoPostStopSchedule = saveAutoPostStopSchedule;
+
 export const loadMainGateLocked = getSavedStationLockState;
 export const saveMainGateLocked = saveStationLockState;
+
+export const loadAttendanceRules = getSavedAttendanceRules;
 
 export const storage = {
   getCurrentUser: getSavedUser,
@@ -691,6 +767,8 @@ export const storage = {
   saveStudents: saveStudents,
   getAttendance: getSavedAttendance,
   saveAttendance: saveAttendance,
+  getAttendanceRules: getSavedAttendanceRules,
+  saveAttendanceRules: saveAttendanceRules,
   getAnnouncements: getSavedAnnouncements,
   saveAnnouncements: saveAnnouncements,
   getSchedule: getSavedSchedule,
@@ -718,5 +796,9 @@ export const storage = {
   getStationLockState: getSavedStationLockState,
   saveStationLockState: saveStationLockState,
   getAutoCreateQREnabled: getSavedAutoCreateQREnabled,
-  saveAutoCreateQREnabled: saveAutoCreateQREnabled
+  saveAutoCreateQREnabled: saveAutoCreateQREnabled,
+  getStationUnlockPassword: getSavedStationUnlockPassword,
+  saveStationUnlockPassword: saveStationUnlockPassword,
+  getAutoPostStopSchedule: getSavedAutoPostStopSchedule,
+  saveAutoPostStopSchedule: saveAutoPostStopSchedule
 };

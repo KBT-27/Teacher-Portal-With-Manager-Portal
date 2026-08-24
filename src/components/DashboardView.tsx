@@ -11,7 +11,8 @@ import {
   Building,
   GraduationCap,
   Sparkles,
-  MessageSquare
+  MessageSquare,
+  FolderOpen
 } from 'lucide-react';
 import { TeacherUser, AttendanceSession, BroadcastQR } from '../types';
 
@@ -218,21 +219,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
 
               <button
-                onClick={() => onNavigateTab('assignments')}
+                onClick={() => onNavigateTab('timetable')}
                 className="p-4 rounded-2xl bg-slate-50 hover:bg-blue-50/60 border border-slate-200 text-left transition-all cursor-pointer group"
               >
-                <GraduationCap className="w-5 h-5 text-emerald-600 mb-2 group-hover:scale-110 transition-transform" />
-                <h4 className="text-xs font-bold text-slate-900">Assignments</h4>
-                <p className="text-[10px] text-slate-500 mt-0.5">Tasks & homework</p>
+                <Calendar className="w-5 h-5 text-emerald-600 mb-2 group-hover:scale-110 transition-transform" />
+                <h4 className="text-xs font-bold text-slate-900">Schedule</h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">Timetable & periods</p>
               </button>
 
               <button
-                onClick={() => onNavigateTab('grades')}
+                onClick={() => onNavigateTab('materials')}
                 className="p-4 rounded-2xl bg-slate-50 hover:bg-blue-50/60 border border-slate-200 text-left transition-all cursor-pointer group"
               >
-                <Sparkles className="w-5 h-5 text-amber-600 mb-2 group-hover:scale-110 transition-transform" />
-                <h4 className="text-xs font-bold text-slate-900">Gradebook</h4>
-                <p className="text-[10px] text-slate-500 mt-0.5">Score exams & tests</p>
+                <FolderOpen className="w-5 h-5 text-amber-600 mb-2 group-hover:scale-110 transition-transform" />
+                <h4 className="text-xs font-bold text-slate-900">Materials</h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">Lesson files & notes</p>
               </button>
             </div>
           </div>

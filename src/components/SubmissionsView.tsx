@@ -5,20 +5,26 @@ import {
   CheckCircle2, 
   Clock, 
   Star,
-  Download,
-  Check
+  Download, 
+  Check,
+  Trash2
 } from 'lucide-react';
-import { SubmissionItem } from '../types';
+import { SubmissionItem, TeacherUser } from '../types';
 
 interface SubmissionsViewProps {
+  currentUser?: TeacherUser;
   submissions: SubmissionItem[];
   onGradeSubmission?: (id: string, score: number, feedback: string) => void;
+  onDeleteSubmission?: (id: string) => void;
 }
 
 export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
+  currentUser,
   submissions,
-  onGradeSubmission
+  onGradeSubmission,
+  onDeleteSubmission
 }) => {
+  const isManager = currentUser?.role === 'manager';
   const [search, setSearch] = useState('');
   const [selectedSub, setSelectedSub] = useState<SubmissionItem | null>(null);
   const [gradeScore, setGradeScore] = useState<number>(95);
@@ -36,6 +42,18 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
     onGradeSubmission(selectedSub.id, Number(gradeScore), feedback);
     showToast(`Graded submission for ${selectedSub.studentName}.`);
     setSelectedSub(null);
+  };
+
+  const handleDeleteSubmission = (sub: SubmissionItem) => {
+    if (!isManager) {
+      showToast('Permission Denied: Teachers and QR Code Mentors cannot erase submissions.');
+      return;
+    }
+    if (!confirm(`Are you sure you want to erase submission by ${sub.studentName}?`)) return;
+    if (onDeleteSubmission) {
+      onDeleteSubmission(sub.id);
+      showToast('Submission removed.');
+    }
   };
 
   const query = (search || '').toLowerCase();
@@ -128,16 +146,27 @@ export const SubmissionsView: React.FC<SubmissionsViewProps> = ({
                     )}
                   </td>
                   <td className="py-3.5 px-5 text-right">
-                    <button
-                      onClick={() => {
-                        setSelectedSub(sub);
-                        setGradeScore(sub.score || 95);
-                        setFeedback(sub.feedback || 'Great solution!');
-                      }}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer"
-                    >
-                      {sub.score !== undefined ? 'Edit Grade' : 'Score'}
-                    </button>
+                    <div className="flex items-center justify-end space-x-1.5">
+                      <button
+                        onClick={() => {
+                          setSelectedSub(sub);
+                          setGradeScore(sub.score || 95);
+                          setFeedback(sub.feedback || 'Great solution!');
+                        }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+                      >
+                        {sub.score !== undefined ? 'Edit Grade' : 'Score'}
+                      </button>
+                      {isManager && (
+                        <button
+                          onClick={() => handleDeleteSubmission(sub)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
+                          title="Manager: Erase Submission"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

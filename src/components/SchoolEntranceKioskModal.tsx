@@ -13,10 +13,12 @@ import {
   ShieldAlert, 
   UserCheck, 
   Check,
-  AlertCircle
+  AlertCircle,
+  Link as LinkIcon,
+  Copy
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
-import { BroadcastQR, AttendanceSession, TeacherUser, AttendanceStatus } from '../types';
+import { BroadcastQR, AttendanceSession, TeacherUser, AttendanceStatus, AttendanceTimeSettings } from '../types';
 import { useRealTimeClock } from '../lib/timeUtils';
 
 interface SchoolEntranceKioskModalProps {
@@ -28,11 +30,15 @@ interface SchoolEntranceKioskModalProps {
   onManualMarkTeacher?: (teacher: TeacherUser, status: AttendanceStatus, note?: string) => void;
   schoolName?: string;
   onRegenerateQR?: () => void;
+  onPostTodayQR?: () => void;
   onRevokeQR?: () => void;
   token?: string;
   countdown?: number;
   isManager?: boolean;
   todayDateStr?: string;
+  todayDateFormatted?: string;
+  currentUser?: TeacherUser;
+  attendanceRules?: AttendanceTimeSettings;
 }
 
 export const SchoolEntranceKioskModal: React.FC<SchoolEntranceKioskModalProps> = ({
@@ -44,11 +50,15 @@ export const SchoolEntranceKioskModal: React.FC<SchoolEntranceKioskModalProps> =
   onManualMarkTeacher,
   schoolName = 'EduSchool International Academy',
   onRegenerateQR,
-  onRevokeQR,
+  onPostTodayQR,
+  onRevokeQR: _onRevokeQR,
   token,
   countdown,
   isManager = false,
-  todayDateStr = '2026-08-21'
+  todayDateStr = '2026-08-21',
+  todayDateFormatted: _todayDateFormatted,
+  currentUser: _currentUser,
+  attendanceRules
 }) => {
   const { timeFormatted, dateFormatted } = useRealTimeClock();
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -60,6 +70,7 @@ export const SchoolEntranceKioskModal: React.FC<SchoolEntranceKioskModalProps> =
   // Quick Teacher Manual Check-in selection state (only if enabled)
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [justCheckedInTeacher, setJustCheckedInTeacher] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const effectiveToken = token || broadcastQR?.token;
   const isQrValidForToday = Boolean(
@@ -303,6 +314,62 @@ export const SchoolEntranceKioskModal: React.FC<SchoolEntranceKioskModalProps> =
               Limit: 1 Scan / Teacher / Day
             </div>
           </div>
+
+          {/* Direct Link at the bottom of QR */}
+          {isQrValidForToday && effectiveToken && (() => {
+            const dynamicToken = `${effectiveToken}#15S_SLOT_${slotIndex}`;
+            const dynamicLinkUrl = typeof window !== 'undefined'
+              ? `${window.location.origin}/attendance?code=${encodeURIComponent(dynamicToken)}`
+              : `https://abunegorgorios.edu/attendance?code=${encodeURIComponent(dynamicToken)}`;
+            
+            const lateMin = broadcastQR?.lateAfterMinutes !== undefined
+              ? broadcastQR.lateAfterMinutes
+              : (attendanceRules?.lateAfterMinutes ?? 15);
+            const stopT = broadcastQR?.stopTime || attendanceRules?.stopTime || '09:30';
+
+            return (
+              <div className="mt-4 w-full bg-slate-900/95 border border-slate-800 rounded-2xl p-3.5 space-y-2 text-left shadow-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-blue-400 flex items-center gap-1.5 uppercase tracking-wider">
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    <span>Attendance Direct Link (15s Dynamic Sync)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(dynamicLinkUrl);
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2000);
+                    }}
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedLink ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3 text-white" />}
+                    <span>{copiedLink ? 'Copied' : 'Copy Link'}</span>
+                  </button>
+                </div>
+
+                <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-mono text-slate-300 break-all select-all">
+                  {dynamicLinkUrl}
+                </div>
+
+                {/* Timing Rules */}
+                <div className="pt-1 text-[10px] space-y-1 text-slate-400 border-t border-slate-800">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span><strong>Present:</strong> within the first {lateMin} minutes.</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span><strong>Late:</strong> after {lateMin} minutes but before the session closes ({stopT}).</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                    <span><strong>Absent:</strong> no valid scan before closing ({stopT}).</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Right Column: Live Terminal Stream */}

@@ -6,7 +6,7 @@ import {
   Calendar, 
   Pin, 
   CheckCircle2,
-  AlertCircle
+  Edit3
 } from 'lucide-react';
 import { Announcement, TeacherUser } from '../types';
 
@@ -23,6 +23,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
 }) => {
   const isManager = currentUser.role === 'manager';
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Announcement | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [priority, setPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
@@ -34,28 +35,64 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleOpenCreate = () => {
+    setEditingItem(null);
+    setTitle('');
+    setContent('');
+    setPriority('normal');
+    setPinned(false);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: Announcement) => {
+    setEditingItem(item);
+    setTitle(item.title);
+    setContent(item.content);
+    setPriority(item.priority === 'urgent' ? 'urgent' : (item.priority === 'info' ? 'info' : 'normal'));
+    setPinned(Boolean(item.pinned));
+    setIsModalOpen(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) return;
 
-    const newAnnouncement: Announcement = {
-      id: `ann-${Date.now()}`,
-      title: title.trim(),
-      content: content.trim(),
-      date: new Date().toISOString().split('T')[0],
-      author: currentUser.name,
-      authorRole: currentUser.role === 'manager' ? 'Academic Manager' : 'Faculty Member',
-      priority,
-      category: 'Faculty Notice',
-      pinned
-    };
+    if (editingItem) {
+      const updated = announcements.map(a => {
+        if (a.id === editingItem.id) {
+          return {
+            ...a,
+            title: title.trim(),
+            content: content.trim(),
+            priority,
+            pinned
+          };
+        }
+        return a;
+      });
+      onSaveAnnouncements(updated);
+      showToast('Announcement updated successfully.');
+    } else {
+      const newAnnouncement: Announcement = {
+        id: `ann-${Date.now()}`,
+        title: title.trim(),
+        content: content.trim(),
+        date: new Date().toISOString().split('T')[0],
+        author: currentUser.name,
+        authorRole: currentUser.role === 'manager' ? 'Academic Manager' : 'Faculty Member',
+        priority,
+        category: 'Faculty Notice',
+        pinned
+      };
+      onSaveAnnouncements([newAnnouncement, ...announcements]);
+      showToast('Published announcement to school bulletin.');
+    }
 
-    onSaveAnnouncements([newAnnouncement, ...announcements]);
     setTitle('');
     setContent('');
     setPinned(false);
+    setEditingItem(null);
     setIsModalOpen(false);
-    showToast('Published announcement to school bulletin.');
   };
 
   const handleDelete = (id: string) => {
@@ -93,7 +130,8 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
 
         {isManager && (
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenCreate}
+            id="post-announcement-btn"
             className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
@@ -143,29 +181,40 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                 Posted by <strong className="text-slate-800">{item.author}</strong> ({item.authorRole})
               </span>
               {isManager && (
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="p-1 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
-                  title="Remove Bulletin"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleOpenEdit(item)}
+                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors"
+                    title="Edit Announcement"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                    title="Remove Bulletin"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               )}
             </div>
           </div>
         ))}
       </div>
 
-      {/* CREATE MODAL */}
+      {/* CREATE / EDIT MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900">Post Announcement</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <h3 className="text-base font-bold text-slate-900">
+                {editingItem ? 'Edit Announcement' : 'Post Announcement'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-3 text-xs">
+            <form onSubmit={handleSave} className="space-y-3 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Title *</label>
                 <input
@@ -228,7 +277,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
                   type="submit"
                   className="px-5 py-2 font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs cursor-pointer"
                 >
-                  Publish Notice
+                  {editingItem ? 'Update Notice' : 'Publish Notice'}
                 </button>
               </div>
             </form>

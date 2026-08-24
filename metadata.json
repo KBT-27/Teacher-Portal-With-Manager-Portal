@@ -1,0 +1,10 @@
+{
+  "name": "EduSchool International Academy Portal",
+  "description": "Multi-Portal Gateway with role-based QR attendance management, Academic Manager control, and Mentor QR station.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

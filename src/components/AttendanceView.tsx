@@ -21,7 +21,7 @@ import {
   Check
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { TeacherUser, AttendanceSession, BroadcastQR } from '../types';
+import { TeacherUser, AttendanceSession, BroadcastQR, AttendanceTimeSettings } from '../types';
 import { ConfirmDialog, ConfirmDialogState } from './ConfirmDialog';
 
 interface AttendanceViewProps {
@@ -30,6 +30,7 @@ interface AttendanceViewProps {
   allAttendanceRecords?: AttendanceSession[];
   teachers?: TeacherUser[];
   broadcastQR?: BroadcastQR | null;
+  attendanceRules?: AttendanceTimeSettings;
   onOpenScanner?: () => void;
   onScanSuccess?: (scannedText: string, method?: 'qr' | 'link') => boolean | void;
   alreadyScannedToday?: boolean;
@@ -43,6 +44,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   allAttendanceRecords = [],
   teachers = [],
   broadcastQR,
+  attendanceRules,
   onOpenScanner = () => {},
   onScanSuccess,
   alreadyScannedToday = false,
@@ -116,10 +118,21 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     }
   };
 
-  // Dynamic Month & Year Navigation (Default: August 2026)
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(7); // 7 is August (0-indexed)
-  const [selectedCalendarDay, setSelectedCalendarDay] = useState<number | null>(21);
+  // Dynamic Month & Year Navigation (Auto syncs to today's date)
+  const parsedToday = (() => {
+    if (todayDateStr && todayDateStr.includes('-')) {
+      const parts = todayDateStr.split('-').map(Number);
+      if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+        return { year: parts[0], month: parts[1] - 1, day: parts[2] };
+      }
+    }
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+  })();
+
+  const [currentYear, setCurrentYear] = useState(parsedToday.year);
+  const [currentMonth, setCurrentMonth] = useState(parsedToday.month);
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<number | null>(parsedToday.day);
 
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
@@ -142,9 +155,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   };
 
   const handleJumpToToday = () => {
-    setCurrentYear(2026);
-    setCurrentMonth(7); // August
-    setSelectedCalendarDay(21);
+    setCurrentYear(parsedToday.year);
+    setCurrentMonth(parsedToday.month);
+    setSelectedCalendarDay(parsedToday.day);
   };
 
   const monthNames = [
@@ -183,7 +196,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     }
   });
 
-  const isCurrentViewingAugust2026 = currentYear === 2026 && currentMonth === 7;
+  const isCurrentViewingTodayMonth = currentYear === parsedToday.year && currentMonth === parsedToday.month;
   const todayPersonalRecord = safePersonalAttendance.find((r) => r && r.date === todayDateStr);
 
   const facultyMembers = teachers.filter(t => t.role === 'teacher');
@@ -448,22 +461,32 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           </form>
 
           {/* Attendance Rules Window */}
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 max-w-2xl space-y-2 text-xs">
-            <div className="space-y-1.5 text-slate-700">
-              <p className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                <span><strong>Present:</strong> within the first 15 minutes.</span>
-              </p>
-              <p className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                <span><strong>Late:</strong> after 15 minutes but before the session closes.</span>
-              </p>
-              <p className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                <span><strong>Absent:</strong> no valid scan before closing.</span>
-              </p>
-            </div>
-          </div>
+          {(() => {
+            const lateMinutes = broadcastQR?.lateAfterMinutes !== undefined
+              ? broadcastQR.lateAfterMinutes
+              : (attendanceRules?.lateAfterMinutes ?? 15);
+            const stopTimeStr = broadcastQR?.stopTime || attendanceRules?.stopTime || '09:30';
+            const lateTimeStr = broadcastQR?.lateTime || attendanceRules?.lateTime || '08:15';
+
+            return (
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 max-w-2xl space-y-2 text-xs">
+                <div className="space-y-1.5 text-slate-700">
+                  <p className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span><strong>Present:</strong> within the first {lateMinutes} minutes.</span>
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <span><strong>Late:</strong> after {lateMinutes} minutes ({lateTimeStr}) but before the session closes ({stopTimeStr}).</span>
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                    <span><strong>Absent:</strong> no valid scan before closing ({stopTimeStr}).</span>
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -687,7 +710,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 onClick={handleJumpToToday}
                 className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 transition-colors cursor-pointer"
               >
-                Today (Aug 21)
+                Today ({monthNames[parsedToday.month].substring(0, 3)} {parsedToday.day})
               </button>
             </div>
             <p className="text-xs text-slate-500 mt-1">
@@ -734,7 +757,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             {Array.from({ length: daysInMonth }).map((_, idx) => {
               const day = idx + 1;
               const rec = attendanceDayMap.get(day);
-              const isToday = isCurrentViewingAugust2026 && day === 21;
+              const isToday = isCurrentViewingTodayMonth && day === parsedToday.day;
               const isSelected = selectedCalendarDay === day;
               let statusBg = 'bg-slate-50 border-slate-200 text-slate-700';
               let statusBadge = null;

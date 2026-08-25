@@ -6,7 +6,8 @@ import {
   Edit3, 
   CheckCircle2,
   BookOpen,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import { Department } from '../types';
 
@@ -19,6 +20,7 @@ export const ManagerDepartmentsView: React.FC<ManagerDepartmentsViewProps> = ({
   departments,
   onSaveDepartments
 }) => {
+  const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [name, setName] = useState('');
@@ -149,9 +151,28 @@ export const ManagerDepartmentsView: React.FC<ManagerDepartmentsViewProps> = ({
         </button>
       </div>
 
+      {/* Search Bar */}
+      <div className="relative max-w-md">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search departments by name, head, or subject..."
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
+        />
+      </div>
+
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {departments.map((dept) => {
+        {departments
+          .filter(d => 
+            d.name.toLowerCase().includes(search.toLowerCase()) ||
+            (d.headTeacher || '').toLowerCase().includes(search.toLowerCase()) ||
+            (d.description || '').toLowerCase().includes(search.toLowerCase()) ||
+            (d.subjects || []).some(s => s.toLowerCase().includes(search.toLowerCase()))
+          )
+          .map((dept) => {
           const subjects = dept.subjects || (dept.subjectList ? dept.subjectList : ['General']);
           return (
             <div

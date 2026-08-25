@@ -35,18 +35,15 @@ export const ManagerTeachersView: React.FC<ManagerTeachersViewProps> = ({
   teachers,
   departments,
   onSaveTeachers,
-  passwordResets = [],
-  onApprovePasswordReset,
-  onRejectPasswordReset
+  passwordResets: _passwordResets = [],
+  onApprovePasswordReset: _onApprovePasswordReset,
+  onRejectPasswordReset: _onRejectPasswordReset
 }) => {
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState('All');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<TeacherUser | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [selectedResetReq, setSelectedResetReq] = useState<PasswordResetRequest | null>(null);
-  const [quickApprovedPass, setQuickApprovedPass] = useState('');
-  const [showPasswordInModal, setShowPasswordInModal] = useState(false);
   const [activePasswordModalTeacher, setActivePasswordModalTeacher] = useState<TeacherUser | null>(null);
   const [directNewPassword, setDirectNewPassword] = useState('');
   const [visiblePasswordTeacherIds, setVisiblePasswordTeacherIds] = useState<Record<string, boolean>>({});
@@ -210,12 +207,6 @@ export const ManagerTeachersView: React.FC<ManagerTeachersViewProps> = ({
     setActivePasswordModalTeacher(null);
   };
 
-  const handleOpenAuthorizeModal = (req: PasswordResetRequest) => {
-    setSelectedResetReq(req);
-    setQuickApprovedPass(req.requestedNewPassword || handleGeneratePassword());
-    setShowPasswordInModal(false);
-  };
-
   const query = (search || '').toLowerCase();
   const filteredTeachers = teachers.filter(t => {
     if (!t) return false;
@@ -278,39 +269,6 @@ export const ManagerTeachersView: React.FC<ManagerTeachersViewProps> = ({
         </button>
       </div>
 
-      {/* Pending Reset Requests Alert Banner */}
-      {pendingResets.length > 0 && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <KeyRound className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-rose-950">
-                {pendingResets.length} Password Reset {pendingResets.length === 1 ? 'Request' : 'Requests'} Pending Manager Authorization
-              </p>
-              <p className="text-[11px] text-rose-800 mt-0.5">
-                Faculty members have requested credential resets with full wish details.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 self-end sm:self-center">
-            {pendingResets.slice(0, 3).map(r => {
-              const displayName = typeof r.teacherName === 'string' ? r.teacherName : 'Faculty';
-              return (
-                <button
-                  key={r.id}
-                  onClick={() => handleOpenAuthorizeModal(r)}
-                  className="px-3 py-1.5 bg-white hover:bg-rose-100 text-rose-900 border border-rose-300 text-xs font-bold rounded-xl shadow-2xs transition-colors cursor-pointer"
-                >
-                  Authorize {displayName.split(' ')[0]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
         <div className="relative flex-1">
@@ -350,14 +308,10 @@ export const ManagerTeachersView: React.FC<ManagerTeachersViewProps> = ({
       {/* Teachers Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredTeachers.map((t) => {
-          const teacherPendingReset = pendingResets.find(r => r.teacherId === t.employeeId || r.email === t.email);
-
           return (
             <div
               key={t.id}
-              className={`bg-white rounded-2xl p-5 border shadow-xs hover:shadow-md transition-all flex flex-col justify-between ${
-                teacherPendingReset ? 'border-amber-300 ring-2 ring-amber-100' : 'border-slate-200'
-              }`}
+              className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center justify-between">
@@ -383,22 +337,6 @@ export const ManagerTeachersView: React.FC<ManagerTeachersViewProps> = ({
                     <p className="text-[11px] text-slate-500">{t.department}</p>
                   </div>
                 </div>
-
-                {/* Status Notice if Reset Pending */}
-                {teacherPendingReset && (
-                  <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5 text-amber-900 font-bold text-[11px]">
-                      <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Reset Requested</span>
-                    </div>
-                    <button
-                      onClick={() => handleOpenAuthorizeModal(teacherPendingReset)}
-                      className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[10px] cursor-pointer"
-                    >
-                      Authorize
-                    </button>
-                  </div>
-                )}
 
                 <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2 text-xs text-slate-600">
                   <div className="flex items-center justify-between">

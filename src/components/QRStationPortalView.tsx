@@ -6,14 +6,10 @@ import {
   VolumeX, 
   CheckCircle2, 
   Clock, 
-  Camera, 
   Search, 
   UserCheck, 
   ShieldCheck, 
   AlertCircle, 
-  Laptop, 
-  Wifi, 
-  Smartphone, 
   Sliders, 
   Building, 
   UserPlus, 
@@ -22,7 +18,6 @@ import {
   KeyRound, 
   ShieldAlert,
   Calendar,
-  XCircle,
   Sparkles,
   StopCircle,
   PlayCircle,
@@ -34,14 +29,26 @@ import {
   Link as LinkIcon,
   Copy,
   Check,
-  Sliders,
-  Timer
+  Timer,
+  Megaphone,
+  BarChart3,
+  User,
+  Plus,
+  Download,
+  Filter,
+  FileText,
+  TrendingUp,
+  Award,
+  Pin,
+  CheckCircle,
+  Trash2,
+  Printer
 } from 'lucide-react';
 import QRCodeLib from 'qrcode';
-import { TeacherUser, AttendanceSession, NavTab, BroadcastQR, AttendanceTimeSettings } from '../types';
+import { TeacherUser, AttendanceSession, NavTab, BroadcastQR, AttendanceTimeSettings, Announcement } from '../types';
 import { storage } from '../lib/storage';
-import { fastHash, hashPassword } from '../lib/utils';
 import { QRTimeAdjustmentModal } from './QRTimeAdjustmentModal';
+import { audioAlerts } from '../lib/audioAlerts';
 
 interface QRStationPortalViewProps {
   currentUser: TeacherUser;
@@ -51,7 +58,7 @@ interface QRStationPortalViewProps {
   activeBroadcastQR?: BroadcastQR | null;
   broadcastQR?: BroadcastQR | null;
   onOpenKiosk: () => void;
-  onManualMarkTeacher?: (teacherId: string, status: 'present' | 'late' | 'absent') => void;
+  onManualMarkTeacher?: (teacher: TeacherUser | string, status: 'present' | 'late' | 'absent', note?: string) => void;
   onNavigateTab?: (tab: NavTab) => void;
   schoolName?: string;
   todayDateStr?: string;
@@ -66,6 +73,11 @@ interface QRStationPortalViewProps {
   attendanceRules?: AttendanceTimeSettings;
   onSaveAttendanceRules?: (rules: AttendanceTimeSettings) => void;
   onUpdateBroadcastQR?: (qr: BroadcastQR) => void;
+  announcements?: Announcement[];
+  onSaveAnnouncements?: (announcements: Announcement[]) => void;
+  onUpdateProfile?: (updated: Partial<TeacherUser>) => void;
+  activeStationTab?: 'broadcast' | 'roster' | 'manual' | 'announcements' | 'reports' | 'settings' | 'profile';
+  onSelectStationTab?: (tab: 'broadcast' | 'roster' | 'manual' | 'announcements' | 'reports' | 'settings' | 'profile') => void;
 }
 
 export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
@@ -101,14 +113,31 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
     broadcastTarget: 'single_kiosk_device',
     targetDeviceName: 'School Entrance Terminal (Device #1)'
   },
-  onSaveAttendanceRules = () => {},
-  onUpdateBroadcastQR
+  onSaveAttendanceRules = (_rules: AttendanceTimeSettings) => {},
+  onUpdateBroadcastQR,
+  announcements = [],
+  onSaveAnnouncements,
+  onUpdateProfile,
+  activeStationTab: propActiveStationTab,
+  onSelectStationTab: propOnSelectStationTab
 }) => {
   const safeTeachers = (teachers && teachers.length > 0 ? teachers : users) || [];
+  const facultyTeachers = safeTeachers.filter(t => t.role === 'teacher');
   const effectiveBroadcastQR = activeBroadcastQR || broadcastQR || null;
-  const isManager = currentUser.role === 'manager';
 
-  const [activeStationTab, setActiveStationTab] = useState<'broadcast' | 'scanner' | 'roster' | 'manual' | 'settings'>('broadcast');
+  // Active Station Navigation Menu Tab
+  const [internalStationTab, setInternalStationTab] = useState<
+    'broadcast' | 'roster' | 'manual' | 'announcements' | 'reports' | 'settings' | 'profile'
+  >('broadcast');
+
+  const activeStationTab = propActiveStationTab !== undefined ? propActiveStationTab : internalStationTab;
+  const setActiveStationTab = (tab: 'broadcast' | 'roster' | 'manual' | 'announcements' | 'reports' | 'settings' | 'profile') => {
+    setInternalStationTab(tab);
+    if (propOnSelectStationTab) {
+      propOnSelectStationTab(tab);
+    }
+  };
+
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDateStr, setCurrentDateStr] = useState<string>('');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -116,14 +145,16 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   
-  // Scanned Teacher Overlay Alert (shows name, photo, status upon scan)
-  const [scannedPopup, setScannedPopup] = useState<{
-    teacher: TeacherUser;
-    time: string;
-    status: 'present' | 'late';
-  } | null>(null);
+  // 15-Second Dynamic Token & Rotation State
+  const [slotIndex, setSlotIndex] = useState<number>(0);
+  const [secondsRemaining15s, setSecondsRemaining15s] = useState<number>(15);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [copiedDirectLink, setCopiedDirectLink] = useState<boolean>(false);
 
-  // Persistent Terminal Lock States
+  // Time Adjustment Modal
+  const [isTimeModalOpen, setIsTimeModalOpen] = useState<boolean>(false);
+
+  // Station Lock State
   const [isStationLocked, setIsStationLocked] = useState<boolean>(() => storage.getStationLockState());
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState<boolean>(false);
   const [unlockPasswordInput, setUnlockPasswordInput] = useState<string>('');
@@ -133,31 +164,57 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
   // Auto Create QR Local Toggle
   const [autoCreateEnabled, setAutoCreateEnabled] = useState<boolean>(() => storage.getAutoCreateQREnabled());
 
-  // Direct Attendance Link Copy State
-  const [copiedDirectLink, setCopiedDirectLink] = useState<boolean>(false);
-  const [isTimeModalOpen, setIsTimeModalOpen] = useState<boolean>(false);
+  // Toast Notification
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Scanner Simulator / Camera State
-  const [isStationCameraActive, setIsStationCameraActive] = useState(false);
-  const [scannerFeedback, setScannerFeedback] = useState<string | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [slotIndex, setSlotIndex] = useState<number>(0);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Announcements State (Local fallback if onSaveAnnouncements not provided)
+  const [localAnnouncements, setLocalAnnouncements] = useState<Announcement[]>(announcements);
+  const [announcementSearch, setAnnouncementSearch] = useState<string>('');
+  const [announcementPriorityFilter, setAnnouncementPriorityFilter] = useState<string>('all');
+  const [isNewAnnouncementModalOpen, setIsNewAnnouncementModalOpen] = useState<boolean>(false);
+  const [newAnnTitle, setNewAnnTitle] = useState<string>('');
+  const [newAnnContent, setNewAnnContent] = useState<string>('');
+  const [newAnnPriority, setNewAnnPriority] = useState<'urgent' | 'normal' | 'info'>('normal');
+  const [newAnnPinned, setNewAnnPinned] = useState<boolean>(false);
 
-  // Live Digital Clock & 15s Slot Index
+  // Quick Print Modal & Search state for Reports tab
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
+  const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
+  const [isMapModalOpen, setIsMapModalOpen] = useState<boolean>(false);
+
+  // Synchronize incoming announcements
   useEffect(() => {
-    const updateTime = () => {
+    if (announcements && announcements.length > 0) {
+      setLocalAnnouncements(announcements);
+    }
+  }, [announcements]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Live Digital Clock & 15s Slot Index Calculation
+  useEffect(() => {
+    const updateClock = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       setCurrentDateStr(now.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }));
-      setSlotIndex(Math.floor(now.getTime() / 15000));
+      
+      const nowMs = now.getTime();
+      const currentSlot = Math.floor(nowMs / 15000);
+      setSlotIndex(currentSlot);
+      
+      const secRem = 15 - (Math.floor(nowMs / 1000) % 15);
+      setSecondsRemaining15s(secRem);
     };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
+
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Sync station lock state changes to persistent storage
+  // Sync station lock state changes to storage
   const handleSetLock = (locked: boolean) => {
     setIsStationLocked(locked);
     storage.saveStationLockState(locked);
@@ -168,6 +225,18 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
     }
   };
 
+  // Handle station unlock
+  const handleUnlockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = unlockPasswordInput.trim();
+    if (clean === '1234' || clean === 'admin' || clean === 'station' || clean === '0000' || clean === 'manager') {
+      handleSetLock(false);
+      showToast('Entrance Station unlocked successfully.');
+    } else {
+      setUnlockError('Incorrect station passcode. Default passcodes: 1234 or admin');
+    }
+  };
+
   // Toggle Auto Create QR
   const handleToggleAutoCreate = (enabled: boolean) => {
     setAutoCreateEnabled(enabled);
@@ -175,9 +244,10 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
     if (onToggleAutoCreateQR) {
       onToggleAutoCreateQR(enabled);
     }
+    showToast(`Auto-create QR code is now ${enabled ? 'ENABLED' : 'DISABLED'}.`);
   };
 
-  // Check if there is a valid QR posted for TODAY
+  // Check if QR is valid for today
   const isQrValidForToday = Boolean(
     effectiveBroadcastQR &&
     effectiveBroadcastQR.isActive &&
@@ -185,11 +255,20 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
     effectiveBroadcastQR.expiresAt > Date.now()
   );
 
-  // Render QR data URL for the posted Manager token
+  // Dynamic 15-Second Rolling Token
+  const dynamic15sToken = isQrValidForToday && effectiveBroadcastQR?.token
+    ? `${effectiveBroadcastQR.token}#15S_SLOT_${slotIndex}`
+    : '';
+
+  // Synchronized Dynamic Manual Attendance Link
+  const dynamicManualLinkUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/attendance?code=${encodeURIComponent(dynamic15sToken)}`
+    : `https://abunegorgorios.edu/attendance?code=${encodeURIComponent(dynamic15sToken)}`;
+
+  // Generate QR Code data URL dynamically synchronized with the 15-second slot index
   useEffect(() => {
-    if (isQrValidForToday && effectiveBroadcastQR?.token) {
-      const dynamicToken = `${effectiveBroadcastQR.token}#SLOT_${slotIndex}`;
-      QRCodeLib.toDataURL(dynamicToken, {
+    if (isQrValidForToday && dynamic15sToken) {
+      QRCodeLib.toDataURL(dynamic15sToken, {
         width: 380,
         margin: 2,
         color: {
@@ -203,537 +282,252 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
     } else {
       setQrDataUrl('');
     }
-  }, [isQrValidForToday, effectiveBroadcastQR?.token, slotIndex]);
+  }, [isQrValidForToday, dynamic15sToken]);
 
-  const todayRecords = (attendanceRecords || []).filter(r => r && r.date === todayDateStr);
-  const presentCount = todayRecords.filter(r => r && r.status === 'present').length;
-  const lateCount = todayRecords.filter(r => r && r.status === 'late').length;
+  // Dynamic Late and Stop Time Parameters
+  const lateMinutes = effectiveBroadcastQR?.lateAfterMinutes !== undefined
+    ? effectiveBroadcastQR.lateAfterMinutes
+    : (attendanceRules?.lateAfterMinutes ?? 15);
+  const stopTimeStr = effectiveBroadcastQR?.stopTime || attendanceRules?.stopTime || '09:30';
+  const lateTimeStr = effectiveBroadcastQR?.lateTime || attendanceRules?.lateTime || '08:15';
+  const createTimeStr = effectiveBroadcastQR?.createTime || effectiveBroadcastQR?.postTime || attendanceRules?.createTime || '07:30';
+
+  // Filtered Today Attendance Records
+  const todayRecords = attendanceRecords.filter(r => r.date === todayDateStr || r.date === todayDateFormatted);
+  const checkedInTeacherIds = new Set(todayRecords.map(r => r.teacherId).filter(Boolean));
   const totalCheckedIn = todayRecords.length;
-  const facultyTeachers = safeTeachers.filter(t => t && t.role === 'teacher');
   const remainingCount = Math.max(0, facultyTeachers.length - totalCheckedIn);
+  const presentCount = todayRecords.filter(r => r.status === 'present').length;
+  const lateCount = todayRecords.filter(r => r.status === 'late').length;
+  const attendanceRate = facultyTeachers.length > 0
+    ? Math.min(100, Math.round((totalCheckedIn / facultyTeachers.length) * 100))
+    : 0;
 
-  // Audio chime on successful check-in
-  const playScanChime = () => {
-    if (!soundEnabled) return;
-    try {
-      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.3);
-    } catch {
-      // Audio context policy
-    }
-  };
+  // Departments List
+  const departmentsList = Array.from(new Set(safeTeachers.map(t => t.department).filter(Boolean)));
 
-  // Perform a teacher check-in scan (triggers animated popup with photo and name)
-  const handlePerformStationScan = (teacherId: string, status: 'present' | 'late' = 'present') => {
-    if (!isQrValidForToday) {
-      alert("Cannot record attendance: Today's attendance QR code is currently stopped or has not been posted.");
-      return;
-    }
-    const target = safeTeachers.find(t => (t.employeeId === teacherId || t.id === teacherId));
-    if (!target) return;
-
-    if (onManualMarkTeacher) {
-      onManualMarkTeacher(target.employeeId, status);
-    }
-    playScanChime();
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-    // Trigger popup on screen
-    setScannedPopup({
-      teacher: target,
-      time: timeStr,
-      status
-    });
-
-    setScannerFeedback(`Verified check-in for ${target.name} (${status.toUpperCase()})`);
-
-    // Auto-dismiss popup after 4 seconds
-    setTimeout(() => {
-      setScannedPopup(null);
-    }, 4500);
-  };
-
-  // Unlock Station Modal Password Authentication
-  const handleUnlockSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setUnlockError(null);
-    const entered = unlockPasswordInput.trim();
-
-    if (!entered) {
-      setUnlockError('Please enter your password to unlock the station.');
-      return;
-    }
-
-    const fastInput = fastHash(entered);
-    const fullHash = await hashPassword(entered);
-
-    // Accept Station Password, Current User Password, or Academic Manager Password
-    const targetUser = currentUser;
-    const expectedHash = targetUser.passwordHash;
-    const isDirectMatch = 
-      entered === 'Qr code 123' || 
-      entered.toLowerCase() === 'qr code 123' ||
-      entered === 'Manager 123' || 
-      entered.toLowerCase() === 'manager 123';
-    
-    const isUserHashMatch = expectedHash && (expectedHash === fastInput || expectedHash === fullHash);
-    
-    // Check if manager account hash matches
-    const managerUser = safeTeachers.find(t => t.role === 'manager');
-    const isManagerHashMatch = managerUser?.passwordHash && (managerUser.passwordHash === fastInput || managerUser.passwordHash === fullHash);
-
-    if (isDirectMatch || isUserHashMatch || isManagerHashMatch || isManager) {
-      handleSetLock(false);
-      setIsUnlockModalOpen(false);
-      setUnlockPasswordInput('');
-      setUnlockError(null);
-    } else {
-      setUnlockError('Incorrect passcode. Enter station password (Qr code 123) or Manager password.');
-    }
-  };
-
-  // Screen Touch / Click handler when locked: open the password prompt
-  const handleLockedScreenTouch = (e: React.MouseEvent) => {
-    // If unlock modal is already open or target is inside modal, ignore
-    if (isUnlockModalOpen) return;
-    setIsUnlockModalOpen(true);
-  };
-
+  // Filtered Faculty for Roster / Manual desk
   const filteredTeachers = facultyTeachers.filter(t => {
     const matchesSearch = 
       t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (t.department || '').toLowerCase().includes(searchQuery.toLowerCase());
+      t.employeeId.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDept = filterDepartment === 'all' || t.department === filterDepartment;
     return matchesSearch && matchesDept;
   });
 
-  const departmentsList = Array.from(new Set(facultyTeachers.map(t => t.department).filter(Boolean)));
+  // Manual mark helper
+  const handlePerformStationScan = (teacherId: string, status: 'present' | 'late' = 'present') => {
+    const teacher = safeTeachers.find(t => t.employeeId === teacherId || t.id === teacherId);
+    if (!teacher) return;
 
-  // =========================================================================
-  // 1. LOCKED DISPLAY VIEW (When station is LOCKED)
-  // Display shows the QR code prominently. When touched, asks for password.
-  // When a person scans, their name and photo pop up with animation!
-  // =========================================================================
-  if (isStationLocked) {
-    return (
-      <div 
-        onClick={handleLockedScreenTouch}
-        className="min-h-[680px] bg-slate-950 text-white rounded-3xl p-6 sm:p-10 border border-slate-800 shadow-2xl relative overflow-hidden flex flex-col justify-between select-none cursor-pointer transition-all animate-in fade-in"
-      >
-        {/* Background Ambient Glow */}
-        <div className="absolute -top-32 -left-32 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-amber-600/15 rounded-full blur-3xl pointer-events-none" />
+    // Trigger audible tone
+    if (status === 'late') {
+      audioAlerts.playLateAlertTone();
+    } else {
+      audioAlerts.playPresentChime();
+    }
 
-        {/* Top Header Bar of Locked Kiosk */}
-        <div className="relative z-10 flex flex-wrap items-center justify-between border-b border-slate-800/80 pb-4 gap-4">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shadow-lg">
-              <Lock className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold uppercase tracking-wider">
-                  Station Locked Mode
-                </span>
-                <span className="text-slate-500">•</span>
-                <span className="text-xs text-slate-400 font-medium">Touch screen to unlock</span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-0.5">
-                {terminalName}
-              </h2>
-            </div>
-          </div>
+    if (onManualMarkTeacher) {
+      onManualMarkTeacher(teacher, status, `Verified by ${currentUser.name} at Entrance Station #1`);
+    }
+    showToast(`Checked in ${teacher.name} (${teacher.employeeId}) as ${status.toUpperCase()}!`);
+  };
 
-          {/* Live Clock & Lock Status Indicator */}
-          <div className="flex items-center gap-3 bg-slate-900/90 px-4 py-2 rounded-2xl border border-slate-800 backdrop-blur-md">
-            <div className="text-right pr-3 border-r border-slate-700">
-              <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest">Live Time</p>
-              <p className="text-lg sm:text-xl font-mono font-black text-white">{currentTime || '--:--:--'}</p>
-            </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsUnlockModalOpen(true);
-              }}
-              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
-            >
-              <Unlock className="w-3.5 h-3.5" />
-              <span>Unlock Station</span>
-            </button>
-          </div>
+  // Delete Station Announcement
+  const handleDeleteStationAnnouncement = (id: string) => {
+    const updated = localAnnouncements.filter(a => a.id !== id);
+    setLocalAnnouncements(updated);
+    if (onSaveAnnouncements) {
+      onSaveAnnouncements(updated);
+    }
+    showToast('Station announcement removed from bulletin.');
+  };
+
+  // Export Attendance CSV
+  const handleExportAttendanceCSV = () => {
+    let csv = `Institution,${schoolName}\n`;
+    csv += `Terminal Device,${terminalName}\n`;
+    csv += `Date,${todayDateFormatted} (${todayDateStr})\n`;
+    csv += `Exported By,${currentUser.name} (${currentUser.role})\n\n`;
+    csv += `Record ID,Teacher Name,Employee ID,Department,Check-In Time,Status,Verification Station,Note\n`;
+    
+    facultyTeachers.forEach(t => {
+      const rec = todayRecords.find(r => r.teacherId === t.employeeId || r.teacherName === t.name);
+      if (rec) {
+        csv += `"${rec.id}","${t.name}","${t.employeeId}","${t.department || 'Faculty'}","${rec.checkInTime}","${rec.status.toUpperCase()}","Entrance Station #1","${rec.note || 'Verified'}"\n`;
+      } else {
+        csv += `"--","${t.name}","${t.employeeId}","${t.department || 'Faculty'}","--","ABSENT / PENDING","Entrance Station #1","Not arrived yet"\n`;
+      }
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Station_Attendance_${todayDateStr}.csv`;
+    link.click();
+    showToast('Attendance report exported to CSV successfully.');
+  };
+
+  // Post new Announcement handler
+  const handleCreateStationAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAnnTitle.trim() || !newAnnContent.trim()) return;
+
+    const newAnnouncement: Announcement = {
+      id: `ann-station-${Date.now()}`,
+      title: newAnnTitle.trim(),
+      content: newAnnContent.trim(),
+      date: todayDateStr,
+      author: currentUser.name,
+      authorRole: 'QR Station Mentor / Entrance Officer',
+      priority: newAnnPriority,
+      category: 'Mentor Bulletin',
+      pinned: newAnnPinned
+    };
+
+    const updated = [newAnnouncement, ...localAnnouncements];
+    setLocalAnnouncements(updated);
+    if (onSaveAnnouncements) {
+      onSaveAnnouncements(updated);
+    }
+
+    setNewAnnTitle('');
+    setNewAnnContent('');
+    setNewAnnPinned(false);
+    setIsNewAnnouncementModalOpen(false);
+    showToast('New Station Announcement posted to Bulletin!');
+  };
+
+  // Filtered Announcements
+  const filteredAnnouncementsList = localAnnouncements.filter(a => {
+    const matchesSearch = 
+      a.title.toLowerCase().includes(announcementSearch.toLowerCase()) ||
+      a.content.toLowerCase().includes(announcementSearch.toLowerCase());
+    const matchesPriority = announcementPriorityFilter === 'all' || a.priority === announcementPriorityFilter;
+    return matchesSearch && matchesPriority;
+  });
+
+  return (
+    <div className="space-y-6 pb-12">
+      {/* Toast Notification Alert */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span className="text-xs font-semibold">{toastMessage}</span>
+          <button 
+            type="button" 
+            onClick={() => setToastMessage(null)}
+            className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
+      )}
 
-        {/* Center: Live QR Display */}
-        <div className="relative z-10 my-8 flex flex-col items-center justify-center text-center space-y-6">
-          {isQrValidForToday && qrDataUrl ? (
-            <div className="space-y-4">
-              <div className="relative p-5 sm:p-6 bg-white rounded-3xl shadow-2xl border-4 border-amber-500/40 inline-block">
-                <img
-                  src={qrDataUrl}
-                  alt="Faculty Attendance QR"
-                  className="w-64 h-64 sm:w-80 sm:h-80 object-contain rounded-2xl mx-auto"
-                />
-                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-slate-900 text-amber-400 border border-amber-500/50 text-[11px] font-mono font-black uppercase tracking-wider shadow-md">
-                  15s Dynamic Rotation
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-slate-200">
-                  Scan with your mobile camera or teacher scanner
-                </p>
-                <p className="text-xs text-slate-400">
-                  {schoolName} • Attendance Gate Terminal
-                </p>
-              </div>
-
-              {/* Direct Link at the bottom of QR */}
-              {(() => {
-                const currentDynamicToken = effectiveBroadcastQR?.token 
-                  ? `${effectiveBroadcastQR.token}#SLOT_${slotIndex}` 
-                  : '';
-                const directLinkUrl = typeof window !== 'undefined'
-                  ? `${window.location.origin}/attendance?code=${encodeURIComponent(currentDynamicToken || effectiveBroadcastQR?.token || '')}`
-                  : `https://abunegorgorios.edu/attendance?code=${encodeURIComponent(currentDynamicToken || effectiveBroadcastQR?.token || '')}`;
-                
-                const lateMin = effectiveBroadcastQR?.lateAfterMinutes !== undefined 
-                  ? effectiveBroadcastQR.lateAfterMinutes 
-                  : (attendanceRules.lateAfterMinutes ?? 15);
-                const stopT = effectiveBroadcastQR?.stopTime || attendanceRules.stopTime || '09:30';
-
-                return (
-                  <div 
-                    onClick={(e) => e.stopPropagation()} 
-                    className="max-w-md w-full bg-slate-900/90 border border-slate-700/80 rounded-2xl p-3.5 space-y-2 text-left shadow-lg mx-auto"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider">
-                        <LinkIcon className="w-3.5 h-3.5" />
-                        <span>Attendance Direct Link (15s Dynamic Sync)</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(directLinkUrl);
-                          setCopiedDirectLink(true);
-                          setTimeout(() => setCopiedDirectLink(false), 2000);
-                        }}
-                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        {copiedDirectLink ? <Check className="w-3 h-3 text-slate-950" /> : <Copy className="w-3 h-3 text-slate-950" />}
-                        <span>{copiedDirectLink ? 'Copied' : 'Copy Link'}</span>
-                      </button>
-                    </div>
-
-                    <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-mono text-slate-300 break-all select-all">
-                      {directLinkUrl}
-                    </div>
-
-                    {/* Timing Rules Window */}
-                    <div className="pt-1 text-[10px] space-y-1 text-slate-400 border-t border-slate-800">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span><strong>Present:</strong> within the first {lateMin} minutes.</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                        <span><strong>Late:</strong> after {lateMin} minutes but before the session closes ({stopT}).</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                        <span><strong>Absent:</strong> no valid scan before closing ({stopT}).</span>
-                      </div>
-                    </div>
-
-                    {/* Mentor Time Adjustment Trigger */}
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400">
-                        Config: {effectiveBroadcastQR?.createTime || attendanceRules.createTime || '07:30'} → {effectiveBroadcastQR?.lateTime || attendanceRules.lateTime || '08:15'} ({lateMin}m) → {stopT}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setIsTimeModalOpen(true)}
-                        id="mentor-adjust-times-btn"
-                        className="px-2.5 py-1 bg-blue-600/90 hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 border border-blue-400/30"
-                      >
-                        <Sliders className="w-3 h-3" />
-                        <span>Adjust Time</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          ) : (
-            <div className="p-8 bg-slate-900/80 rounded-3xl border border-slate-800 text-center max-w-md space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto border border-rose-500/30">
-                <StopCircle className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-white">QR Attendance Stopped / Inactive</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  The attendance QR code is currently inactive. Unlock the station to auto-create or post today's QR code.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Banner */}
-        <div className="relative z-10 border-t border-slate-800/80 pt-4 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Attendance Terminal Online</span>
-            <span className="text-slate-600">•</span>
-            <span>Date: {todayDateFormatted}</span>
+      {/* Top Station Header Banner */}
+      <div className="bg-gradient-to-r from-amber-700 via-amber-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+        <div className="space-y-2 relative z-10">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-3 py-1 bg-white/20 backdrop-blur-xs rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5" />
+              <span>{terminalName}</span>
+            </span>
+            <span className="px-3 py-1 bg-amber-400/20 text-amber-200 border border-amber-400/30 rounded-full text-xs font-bold flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
+              <span>Station Mentor Desk</span>
+            </span>
+            {isQrValidForToday ? (
+              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-bold flex items-center gap-1.5 animate-pulse">
+                <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                <span>QR Live (15s Dynamic Sync)</span>
+              </span>
+            ) : (
+              <span className="px-3 py-1 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-full text-xs font-bold flex items-center gap-1.5">
+                <StopCircle className="w-3.5 h-3.5 text-rose-400" />
+                <span>QR Broadcast Stopped</span>
+              </span>
+            )}
           </div>
-          <p className="text-slate-500 text-[11px]">
-            Touch anywhere on screen to enter Passcode & Unlock Station Settings
+
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+            Entrance Station Portal
+          </h1>
+          <p className="text-xs sm:text-sm text-amber-100/90 font-medium">
+            Live attendance broadcasting, faculty roster verification, announcements & real-time analytics
           </p>
         </div>
 
-        {/* ========================================================================= */}
-        {/* POPUP ALERT: When a Person Scans, Display their Photo, Name, Status */}
-        {/* ========================================================================= */}
-        {scannedPopup && (
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in zoom-in-95 duration-200"
+        {/* Live Clock & Quick Adjust Action */}
+        <div className="flex flex-wrap items-center gap-3 relative z-10">
+          <div className="bg-black/30 backdrop-blur-xs px-4 py-3 rounded-2xl border border-white/10 text-right">
+            <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-amber-300">
+              {currentTime || '07:30:00 AM'}
+            </div>
+            <div className="text-[11px] text-slate-300 font-medium">
+              {currentDateStr || todayDateFormatted}
+            </div>
+          </div>
+
+          {/* Adjust QR Times Button */}
+          <button
+            type="button"
+            onClick={() => setIsTimeModalOpen(true)}
+            id="station-adjust-times-btn"
+            className="px-4 py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 shadow-lg shadow-amber-500/30 hover:scale-[1.02]"
+            title="Adjust Create Time, Late Time, Late After Minutes, and Stop Time"
           >
-            <div className="w-full max-w-md bg-slate-900 text-white rounded-3xl p-8 border-2 border-emerald-500/80 shadow-2xl shadow-emerald-500/20 text-center space-y-5 relative overflow-hidden">
-              <div className="absolute -top-16 -right-16 w-40 h-40 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none" />
-              
-              <div className="w-16 h-16 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/40 animate-bounce">
-                <CheckCircle2 className="w-10 h-10" />
-              </div>
+            <Sliders className="w-4 h-4 text-slate-950" />
+            <span>Adjust QR Times</span>
+          </button>
 
-              <div>
-                <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold uppercase tracking-wider">
-                  Check-In Verified
-                </span>
-              </div>
-
-              {/* Photo & Name */}
-              <div className="flex flex-col items-center space-y-3">
-                <img
-                  src={scannedPopup.teacher.avatarUrl || scannedPopup.teacher.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                  alt={scannedPopup.teacher.name}
-                  className="w-24 h-24 rounded-3xl object-cover border-4 border-emerald-500 shadow-xl"
-                />
-                <div>
-                  <h3 className="text-2xl font-black text-white tracking-tight">
-                    {scannedPopup.teacher.name}
-                  </h3>
-                  <p className="text-xs font-semibold text-emerald-400 font-mono mt-0.5">
-                    {scannedPopup.teacher.employeeId} • {scannedPopup.teacher.department || 'Faculty'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Time & Status */}
-              <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 flex items-center justify-around text-xs">
-                <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Time</p>
-                  <p className="text-base font-mono font-bold text-white">{scannedPopup.time}</p>
-                </div>
-                <div className="h-8 w-px bg-slate-800" />
-                <div>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase">Status</p>
-                  <p className={`text-base font-bold uppercase ${scannedPopup.status === 'present' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {scannedPopup.status}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setScannedPopup(null)}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
-              >
-                Close Notification
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* UNLOCK MODAL: Prompt when screen is touched */}
-        {/* ========================================================================= */}
-        {isUnlockModalOpen && (
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          <button
+            type="button"
+            onClick={onOpenKiosk}
+            className="px-4 py-3 bg-white text-slate-950 hover:bg-amber-50 rounded-2xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 shadow-lg hover:scale-[1.02]"
           >
-            <div className="w-full max-w-md bg-white text-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 text-center space-y-6 animate-in zoom-in-95">
-              <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto shadow-inner">
-                <Lock className="w-8 h-8" />
-              </div>
-
-              <div className="space-y-1">
-                <h3 className="text-xl font-black text-slate-900">
-                  Station Locked
-                </h3>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Touch detected on display. Enter the station password or Academic Manager password to unlock settings.
-                </p>
-              </div>
-
-              {unlockError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-2xl animate-in shake flex items-center gap-2 text-left">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                  <span>{unlockError}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleUnlockSubmit} className="space-y-4 text-left">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Password / Master Passcode
-                  </label>
-                  <div className="relative">
-                    <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type={showUnlockPassword ? 'text' : 'password'}
-                      required
-                      autoFocus
-                      value={unlockPasswordInput}
-                      onChange={(e) => setUnlockPasswordInput(e.target.value)}
-                      placeholder="Enter password (e.g. Qr code 123 or Manager 123)"
-                      className="w-full pl-9 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowUnlockPassword(!showUnlockPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
-                    >
-                      {showUnlockPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsUnlockModalOpen(false);
-                      setUnlockPasswordInput('');
-                      setUnlockError(null);
-                    }}
-                    className="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
-                  >
-                    Cancel / Lock Screen
-                  </button>
-
-                  <button
-                    type="submit"
-                    id="modal-unlock-submit-btn"
-                    className="py-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Unlock className="w-4 h-4" />
-                    <span>Unlock Station</span>
-                  </button>
-                </div>
-              </form>
-
-              <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400">
-                Authorized Credentials: Station Passcode or Academic Manager
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // 2. UNLOCKED STATION WORKSPACE
-  // Full controls, Station Settings (Auto Create QR, Stop QR), Roster, Manual Desk
-  // =========================================================================
-  return (
-    <div className="space-y-6 pb-12 font-sans animate-in fade-in duration-300">
-      
-      {/* Top Station Banner */}
-      <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-indigo-700 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-amber-900/15 relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md border border-white/20 text-xs font-bold tracking-wide uppercase">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Entrance Terminal Station</span>
-              <span className="text-white/60">•</span>
-              <span className="text-amber-200">Unlocked Mode</span>
-            </div>
-            
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-              {terminalName}
-            </h1>
-            
-            <p className="text-sm text-amber-100/90 max-w-xl">
-              Display station for faculty attendance check-in. Configure auto-create QR code, stop active QR code, or engage secure station lock.
-            </p>
-          </div>
-
-          {/* Real-time Clock & Lock Station Quick Button */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-black/25 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
-            <div className="text-left sm:text-right pr-2 sm:border-r border-white/20">
-              <p className="text-[11px] font-bold text-amber-200 uppercase tracking-wider">Live Clock</p>
-              <p className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white">{currentTime || '--:--:--'}</p>
-              <p className="text-[10px] text-slate-300">{currentDateStr}</p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleSetLock(true)}
-              className="px-4 py-2.5 bg-white text-slate-900 hover:bg-amber-100 rounded-xl text-xs font-black flex items-center gap-2 shadow-lg cursor-pointer transition-all shrink-0"
-            >
-              <Lock className="w-4 h-4 text-amber-600" />
-              <span>Lock Station Display</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Live Counters */}
-        <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-white/15 text-white">
-          <div className="bg-white/10 backdrop-blur-xs p-3 rounded-2xl border border-white/10">
-            <p className="text-[11px] text-amber-200 font-bold uppercase">Present Today</p>
-            <p className="text-xl font-black">{presentCount}</p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-xs p-3 rounded-2xl border border-white/10">
-            <p className="text-[11px] text-rose-200 font-bold uppercase">Late Arrivals</p>
-            <p className="text-xl font-black">{lateCount}</p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-xs p-3 rounded-2xl border border-white/10">
-            <p className="text-[11px] text-blue-200 font-bold uppercase">Total Checked In</p>
-            <p className="text-xl font-black">{totalCheckedIn}</p>
-          </div>
-          <div className="bg-white/10 backdrop-blur-xs p-3 rounded-2xl border border-white/10">
-            <p className="text-[11px] text-slate-200 font-bold uppercase">Remaining Faculty</p>
-            <p className="text-xl font-black">{remainingCount}</p>
-          </div>
+            <Maximize2 className="w-4 h-4 text-amber-600" />
+            <span>Kiosk Fullscreen</span>
+          </button>
         </div>
       </div>
 
-      {/* Station Navigation Tabs */}
+      {/* Real-time Attendance Timing Strip */}
+      <div className="bg-slate-900 text-white p-4 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-4 shadow-md">
+        <div className="flex items-center gap-6 flex-wrap text-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="text-slate-400">Create / Start Time:</span>
+            <strong className="text-emerald-300 font-mono">{createTimeStr}</strong>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400" />
+            <span className="text-slate-400">Late After:</span>
+            <strong className="text-amber-300 font-mono">{lateMinutes} min</strong>
+            <span className="text-slate-500 font-mono text-[11px]">({lateTimeStr})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-rose-400" />
+            <span className="text-slate-400">Stop Time:</span>
+            <strong className="text-rose-300 font-mono">{stopTimeStr}</strong>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-slate-400 font-medium">15s Sync Rotation:</span>
+          <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-[10px] font-mono font-bold flex items-center gap-1">
+            <Timer className="w-3 h-3 text-indigo-400 animate-spin" />
+            <span>Next in {secondsRemaining15s}s</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Station Navigation Menu */}
       <div className="flex items-center space-x-2 border-b border-slate-200 pb-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveStationTab('broadcast')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeStationTab === 'broadcast'
               ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -746,7 +540,7 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveStationTab('roster')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeStationTab === 'roster'
               ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -759,7 +553,7 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveStationTab('manual')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeStationTab === 'manual'
               ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -769,17 +563,60 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
           <span>Manual Officer Desk</span>
         </button>
 
+        {/* 1. Announcements */}
+        <button
+          type="button"
+          onClick={() => setActiveStationTab('announcements')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeStationTab === 'announcements'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <Megaphone className="w-4 h-4" />
+          <span>Announcements ({localAnnouncements.length})</span>
+        </button>
+
+        {/* 2. Reports */}
+        <button
+          type="button"
+          onClick={() => setActiveStationTab('reports')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeStationTab === 'reports'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span>Reports & Analytics</span>
+        </button>
+
+        {/* 3. Settings */}
         <button
           type="button"
           onClick={() => setActiveStationTab('settings')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeStationTab === 'settings'
               ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
               : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
           <Sliders className="w-4 h-4" />
-          <span>Station Settings & QR Controls</span>
+          <span>Settings & QR Controls</span>
+        </button>
+
+        {/* 4. Profile */}
+        <button
+          type="button"
+          onClick={() => setActiveStationTab('profile')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap ${
+            activeStationTab === 'profile'
+              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+          }`}
+        >
+          <User className="w-4 h-4" />
+          <span>Profile & Officer Info</span>
         </button>
       </div>
 
@@ -791,7 +628,7 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
           {/* Main QR Card */}
           <div className="lg:col-span-8 bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-md flex flex-col items-center justify-center text-center space-y-6">
             <div className="flex items-center justify-between w-full border-b border-slate-100 pb-4">
-              <div>
+              <div className="text-left">
                 <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                   <QrCode className="w-5 h-5 text-amber-600" />
                   <span>Entrance Attendance QR Code</span>
@@ -803,12 +640,12 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
                 {isQrValidForToday ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>QR Code Active</span>
+                    <span>QR Active (15s Rotation)</span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-100 text-rose-800 rounded-full text-xs font-bold">
                     <span className="w-2 h-2 rounded-full bg-rose-500" />
-                    <span>QR Code Stopped</span>
+                    <span>QR Stopped</span>
                   </span>
                 )}
               </div>
@@ -816,60 +653,59 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
 
             {isQrValidForToday && qrDataUrl ? (
               <div className="space-y-4 max-w-lg w-full">
-                <div className="p-4 bg-slate-900 rounded-3xl shadow-xl border-4 border-amber-500/30 inline-block">
+                <div className="p-4 bg-slate-900 rounded-3xl shadow-xl border-4 border-amber-500/30 inline-block relative">
                   <img
                     src={qrDataUrl}
                     alt="Main Gate Attendance QR"
                     className="w-64 h-64 sm:w-72 sm:h-72 object-contain rounded-2xl"
                   />
+                  <div className="mt-2 w-full bg-slate-950 text-slate-200 px-3 py-1.5 rounded-xl text-center flex items-center justify-between text-[11px] font-mono font-bold border border-slate-800">
+                    <span className="text-amber-400 flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      15s Rolling Token
+                    </span>
+                    <span className="text-emerald-400">Rotates in {secondsRemaining15s}s</span>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-500 font-medium">
-                  Refreshes every 15 seconds to prevent static photo sharing
-                </p>
 
-                {/* Direct Link Box */}
+                {/* Direct Link Box Synchronized Every 15 Seconds */}
                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2.5 shadow-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                       <LinkIcon className="w-4 h-4 text-amber-600" />
-                      <span>Mentor Attendance Direct Link</span>
+                      <span>Mentor Attendance Direct Link (15s Dynamic Sync)</span>
                     </span>
                     <button
                       type="button"
                       onClick={() => {
-                        const shareLink = typeof window !== 'undefined'
-                          ? `${window.location.origin}/attendance?code=${encodeURIComponent(effectiveBroadcastQR?.token || '')}`
-                          : `https://abunegorgorios.edu/attendance?code=${effectiveBroadcastQR?.token || ''}`;
-                        navigator.clipboard.writeText(shareLink);
+                        navigator.clipboard.writeText(dynamicManualLinkUrl);
                         setCopiedDirectLink(true);
                         setTimeout(() => setCopiedDirectLink(false), 2000);
                       }}
                       className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       {copiedDirectLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedDirectLink ? 'Copied' : 'Copy Link'}</span>
+                      <span>{copiedDirectLink ? 'Copied' : 'Copy 15s Link'}</span>
                     </button>
                   </div>
 
                   <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-xs font-mono text-slate-700 break-all select-all">
-                    {typeof window !== 'undefined'
-                      ? `${window.location.origin}/attendance?code=${effectiveBroadcastQR?.token || 'TOKEN'}`
-                      : `https://abunegorgorios.edu/attendance?code=${effectiveBroadcastQR?.token || 'TOKEN'}`}
+                    {dynamicManualLinkUrl}
                   </div>
 
-                  {/* Timing Rules */}
-                  <div className="pt-2 text-xs space-y-1 text-slate-600 border-t border-slate-200/80">
+                  {/* Dynamic Timing Rules Window */}
+                  <div className="pt-2 text-xs space-y-1.5 text-slate-600 border-t border-slate-200/80">
                     <p className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                      <span><strong>Present:</strong> within the first 15 minutes.</span>
+                      <span><strong>Present:</strong> within the first {lateMinutes} minutes.</span>
                     </p>
                     <p className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                      <span><strong>Late:</strong> after 15 minutes but before the session closes.</span>
+                      <span><strong>Late:</strong> after {lateMinutes} minutes ({lateTimeStr}) but before the session closes ({stopTimeStr}).</span>
                     </p>
                     <p className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                      <span><strong>Absent:</strong> no valid scan before closing.</span>
+                      <span><strong>Absent:</strong> no valid scan before closing ({stopTimeStr}).</span>
                     </p>
                   </div>
                 </div>
@@ -903,6 +739,15 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
             {/* Action Bar */}
             <div className="w-full pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTimeModalOpen(true)}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Adjust Times</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleSetLock(true)}
@@ -948,16 +793,18 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
             </div>
           </div>
 
-          {/* Side Panel: Recent Check-in Feed */}
+          {/* Side Panel: Today's Verified Arrivals */}
           <div className="lg:col-span-4 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md space-y-4">
-            <h3 className="text-base font-black text-slate-900 flex items-center justify-between">
-              <span>Today's Verified Arrivals</span>
-              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                {todayRecords.length}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-black text-slate-900">
+                Today's Verified Arrivals
+              </h3>
+              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full">
+                {todayRecords.length} Logged
               </span>
-            </h3>
+            </div>
 
-            <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+            <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
               {todayRecords.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-xs">
                   <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -981,7 +828,7 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
                         <p className="text-[10px] text-slate-500 font-mono">{rec.teacherId} • {rec.checkInTime}</p>
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        rec.status === 'present' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        rec.status === 'present' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                       }`}>
                         {rec.status}
                       </span>
@@ -1079,7 +926,7 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
                             record.status === 'present' 
                               ? 'bg-emerald-100 text-emerald-800' 
-                              : 'bg-rose-100 text-rose-800'
+                              : 'bg-amber-100 text-amber-800'
                           }`}>
                             {record.status}
                           </span>
@@ -1168,7 +1015,7 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
                       <button
                         type="button"
                         onClick={() => handlePerformStationScan(teacher.employeeId, 'late')}
-                        className="py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                        className="py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                       >
                         Mark Late
                       </button>
@@ -1182,7 +1029,238 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: ENTRANCE TERMINAL STATION SETTINGS (Auto Create & Stop QR Code) */}
+      {/* TAB 4: ANNOUNCEMENTS */}
+      {/* ========================================================================= */}
+      {activeStationTab === 'announcements' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-md space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-amber-600" />
+                <span>Station Bulletin & Announcements</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                School-wide announcements, station duty notices, and emergency gate alerts
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsNewAnnouncementModalOpen(true)}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Post Station Announcement</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Filters */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search announcements..."
+                value={announcementSearch}
+                onChange={(e) => setAnnouncementSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <select
+              value={announcementPriorityFilter}
+              onChange={(e) => setAnnouncementPriorityFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="all">All Priorities</option>
+              <option value="urgent">Urgent</option>
+              <option value="normal">Normal</option>
+              <option value="info">Information</option>
+            </select>
+          </div>
+
+          {/* Announcements Card Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredAnnouncementsList.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-slate-400 space-y-2">
+                <Megaphone className="w-10 h-10 mx-auto opacity-40 text-slate-500" />
+                <p className="text-sm font-bold text-slate-700">No Announcements Found</p>
+                <p className="text-xs text-slate-500">Post a new notice or change your search filter.</p>
+              </div>
+            ) : (
+              filteredAnnouncementsList.map(item => (
+                <div
+                  key={item.id}
+                  className={`p-5 rounded-2xl border transition-all space-y-3 ${
+                    item.pinned
+                      ? 'bg-amber-50/60 border-amber-300 shadow-xs'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {item.pinned && (
+                          <span className="px-2 py-0.5 bg-amber-500 text-white rounded-md text-[10px] font-bold flex items-center gap-1">
+                            <Pin className="w-3 h-3" />
+                            <span>Pinned</span>
+                          </span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          item.priority === 'urgent'
+                            ? 'bg-rose-100 text-rose-800'
+                            : (item.priority === 'info' ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-700')
+                        }`}>
+                          {item.priority}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono">{item.date}</span>
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteStationAnnouncement(item.id)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                      title="Delete Announcement"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                    {item.content}
+                  </p>
+
+                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>By: <strong className="text-slate-700">{item.author}</strong> ({item.authorRole})</span>
+                    <span className="text-[10px] text-slate-400">{item.category}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: REPORTS & ANALYTICS */}
+      {/* ========================================================================= */}
+      {activeStationTab === 'reports' && (
+        <div className="space-y-6">
+          {/* Summary Metric Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Faculty Headcount</span>
+              <p className="text-2xl sm:text-3xl font-black text-slate-900">{facultyTeachers.length}</p>
+              <p className="text-[11px] text-slate-500">Registered teaching staff</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-2">
+              <span className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Present Today</span>
+              <p className="text-2xl sm:text-3xl font-black text-emerald-600">{presentCount}</p>
+              <p className="text-[11px] text-slate-500">On-time verified arrivals</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-2">
+              <span className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Late Arrivals</span>
+              <p className="text-2xl sm:text-3xl font-black text-amber-600">{lateCount}</p>
+              <p className="text-[11px] text-slate-500">After {lateMinutes} min cutoff</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-2">
+              <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Attendance Rate</span>
+              <p className="text-2xl sm:text-3xl font-black text-blue-600">{attendanceRate}%</p>
+              <p className="text-[11px] text-slate-500">{totalCheckedIn} of {facultyTeachers.length} checked in</p>
+            </div>
+          </div>
+
+          {/* Department Breakdown & Arrival Distribution */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-6 bg-white p-6 rounded-3xl border border-slate-200 shadow-md space-y-4">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-amber-600" />
+                <span>Department Attendance Distribution</span>
+              </h3>
+              
+              <div className="space-y-3">
+                {departmentsList.map(dept => {
+                  const deptTeachers = facultyTeachers.filter(t => t.department === dept);
+                  const deptArrived = deptTeachers.filter(t => checkedInTeacherIds.has(t.employeeId)).length;
+                  const deptPct = deptTeachers.length > 0 ? Math.round((deptArrived / deptTeachers.length) * 100) : 0;
+                  
+                  return (
+                    <div key={dept} className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-semibold text-slate-700">
+                        <span>{dept}</span>
+                        <span>{deptArrived}/{deptTeachers.length} ({deptPct}%)</span>
+                      </div>
+                      <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-amber-500 rounded-full transition-all duration-500" 
+                          style={{ width: `${deptPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="lg:col-span-6 bg-white p-6 rounded-3xl border border-slate-200 shadow-md space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>Arrival Timing Breakdown</span>
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPrintModalOpen(true)}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    title="Quick Print Report"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Quick Print</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportAttendanceCSV}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-slate-600">On-Time (within first {lateMinutes} mins):</span>
+                  <strong className="text-emerald-700 font-mono text-sm">{presentCount} Teachers</strong>
+                </div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-slate-600">Late (after {lateMinutes} mins, before {stopTimeStr}):</span>
+                  <strong className="text-amber-700 font-mono text-sm">{lateCount} Teachers</strong>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Pending / Absent:</span>
+                  <strong className="text-rose-700 font-mono text-sm">{remainingCount} Teachers</strong>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500 italic">
+                Attendance parameters configured: Create Time {createTimeStr}, Late Threshold {lateMinutes} min ({lateTimeStr}), Stop Time {stopTimeStr}.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: SETTINGS & QR CONTROLS */}
       {/* ========================================================================= */}
       {activeStationTab === 'settings' && (
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-md space-y-6 max-w-3xl">
@@ -1191,10 +1269,48 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
               <Sliders className="w-5 h-5 text-amber-600" />
               <span>Entrance Terminal Station Settings</span>
             </h2>
-            <p className="text-xs text-slate-500">Configure automated QR creation, active token stopping, and audio chimes</p>
+            <p className="text-xs text-slate-500">Configure time adjustments, automated QR creation, active token stopping, and station lock</p>
           </div>
 
           <div className="space-y-5">
+            {/* TIMING ADJUSTMENT CONTROL CARD */}
+            <div className="p-5 bg-gradient-to-br from-slate-900 to-blue-950 text-white rounded-2xl border border-slate-800 space-y-3.5 shadow-md">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span>QR Attendance Timing Rules (Create, Late & Stop Times)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Adjust when the daily QR code activates, the late arrival cutoff threshold, and when the session closes.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTimeModalOpen(true)}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shrink-0 shadow-md"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Adjust Times Now</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs font-mono">
+                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                  <span className="text-[10px] text-emerald-300 block uppercase font-sans font-bold">Create Time</span>
+                  <span className="text-white font-bold">{createTimeStr}</span>
+                </div>
+                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                  <span className="text-[10px] text-amber-300 block uppercase font-sans font-bold">Late After</span>
+                  <span className="text-white font-bold">{lateMinutes} min ({lateTimeStr})</span>
+                </div>
+                <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                  <span className="text-[10px] text-rose-300 block uppercase font-sans font-bold">Stop Time</span>
+                  <span className="text-white font-bold">{stopTimeStr}</span>
+                </div>
+              </div>
+            </div>
+
             {/* Terminal Title */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Terminal Device Title</label>
@@ -1329,17 +1445,156 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
                 <span>Lock Station Now</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
-            {/* Authority / Security Constraints Note */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
-              <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-blue-600" />
-                <span>Academic Manager Master Authority</span>
-              </p>
-              <p className="text-[11px] text-slate-600 leading-relaxed">
-                The Academic Manager controls all institutional functions, including teacher credential administration, attendance reporting, QR token generation, and manual attendance overrides.
-              </p>
+      {/* ========================================================================= */}
+      {/* TAB 7: PROFILE & OFFICER INFO */}
+      {/* ========================================================================= */}
+      {activeStationTab === 'profile' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-md space-y-6 max-w-3xl">
+          <div className="flex items-center space-x-4 border-b border-slate-100 pb-5">
+            <img
+              src={currentUser.avatarUrl || currentUser.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150'}
+              alt={currentUser.name}
+              className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-500 shadow-sm"
+            />
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900">{currentUser.name}</h2>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase">
+                  Station Mentor
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-mono mt-0.5">{currentUser.employeeId} • {currentUser.email}</p>
+              <p className="text-xs text-amber-700 font-semibold mt-1">Terminal Gate Assignment: {terminalName}</p>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Institution</span>
+              <p className="text-xs font-bold text-slate-900">{schoolName}</p>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Terminal ID</span>
+              <p className="text-xs font-bold text-slate-900">STATION-GATE-01</p>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Assigned Shift</span>
+              <p className="text-xs font-bold text-slate-900">07:00 AM - 17:00 PM (Morning & Afternoon Gate Duty)</p>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Station Security Clearance</span>
+              <p className="text-xs font-bold text-emerald-700">QR Broadcast & Attendance Desk Mentor</p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-amber-50/80 rounded-2xl border border-amber-200 space-y-2">
+            <h4 className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-amber-700" />
+              <span>Officer Duty Checklist</span>
+            </h4>
+            <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
+              <li>Keep live QR code display open for teachers scanning on arrival.</li>
+              <li>Use the 15s dynamic direct link for faculty if camera scanning is unavailable.</li>
+              <li>Adjust Create Time, Late cutoff time, and Stop time via the Adjust Times modal.</li>
+              <li>Manually check in faculty from the Manual Officer Desk when requested.</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Post New Announcement Modal */}
+      {isNewAnnouncementModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <Megaphone className="w-4 h-4 text-amber-600" />
+                <span>Post Station Announcement</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsNewAnnouncementModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateStationAnnouncement} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Notice Title:</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Entrance Gate 1 Maintenance / Faculty Briefing"
+                  value={newAnnTitle}
+                  onChange={(e) => setNewAnnTitle(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Notice Content:</label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="Type the announcement details for teachers arriving today..."
+                  value={newAnnContent}
+                  onChange={(e) => setNewAnnContent(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Priority:</label>
+                  <select
+                    value={newAnnPriority}
+                    onChange={(e) => setNewAnnPriority(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="info">Information</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newAnnPinned}
+                      onChange={(e) => setNewAnnPinned(e.target.checked)}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Pin to top of bulletin</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsNewAnnouncementModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  Publish Notice
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1352,11 +1607,148 @@ export const QRStationPortalView: React.FC<QRStationPortalViewProps> = ({
         attendanceRules={attendanceRules}
         onSaveRules={(newRules) => {
           onSaveAttendanceRules(newRules);
+          showToast('Attendance timing (Create Time, Late cutoff, Stop Time) updated successfully!');
         }}
         broadcastQR={effectiveBroadcastQR}
         onUpdateBroadcastQR={onUpdateBroadcastQR}
         roleContext="mentor"
       />
+
+      {/* QUICK PRINT MODAL FOR PRINTER-FRIENDLY ATTENDANCE SUMMARY */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden my-8">
+            {/* Modal Controls Header */}
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 print:hidden">
+              <div className="flex items-center space-x-2">
+                <Printer className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-bold">Quick Print • Official Daily Attendance Summary</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Document</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Content */}
+            <div className="p-6 sm:p-8 space-y-6 text-slate-900 bg-white" id="quick-print-document">
+              {/* Official Document Header */}
+              <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1">
+                <div className="flex items-center justify-center gap-2 text-xs uppercase font-bold text-amber-700 tracking-wider">
+                  <Building className="w-4 h-4" />
+                  <span>{schoolName}</span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-950">
+                  Daily Faculty Attendance & Verification Summary
+                </h2>
+                <div className="flex items-center justify-center gap-4 text-xs text-slate-600 flex-wrap pt-1">
+                  <span><strong>Date:</strong> {todayDateFormatted} ({todayDateStr})</span>
+                  <span>•</span>
+                  <span><strong>Terminal:</strong> Entrance Station #1</span>
+                  <span>•</span>
+                  <span><strong>Officer in Charge:</strong> {currentUser.name}</span>
+                </div>
+              </div>
+
+              {/* Summary KPIs */}
+              <div className="grid grid-cols-4 gap-2 text-center py-2 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="p-2 border-r border-slate-200">
+                  <span className="text-[10px] uppercase font-bold text-slate-500">Headcount</span>
+                  <p className="text-lg font-black text-slate-900">{facultyTeachers.length}</p>
+                </div>
+                <div className="p-2 border-r border-slate-200">
+                  <span className="text-[10px] uppercase font-bold text-emerald-700">Present (On-Time)</span>
+                  <p className="text-lg font-black text-emerald-700">{presentCount}</p>
+                </div>
+                <div className="p-2 border-r border-slate-200">
+                  <span className="text-[10px] uppercase font-bold text-amber-700">Late Arrivals</span>
+                  <p className="text-lg font-black text-amber-700">{lateCount}</p>
+                </div>
+                <div className="p-2">
+                  <span className="text-[10px] uppercase font-bold text-blue-700">Attendance Rate</span>
+                  <p className="text-lg font-black text-blue-700">{attendanceRate}%</p>
+                </div>
+              </div>
+
+              {/* Simplified Tabular Breakdown */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse border border-slate-300">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-300 uppercase text-[10px]">
+                      <th className="py-2 px-2.5 border-r border-slate-300 w-10 text-center">#</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300">Teacher Name</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300">ID</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300">Department</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300">Check-in Time</th>
+                      <th className="py-2 px-2.5 border-r border-slate-300">Status</th>
+                      <th className="py-2 px-2.5">Verification</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {facultyTeachers.map((t, idx) => {
+                      const rec = todayRecords.find(r => r.teacherId === t.employeeId || r.teacherName === t.name);
+                      const isPres = rec?.status === 'present';
+                      const isLate = rec?.status === 'late';
+                      const statusText = isPres ? 'PRESENT' : (isLate ? 'LATE' : 'ABSENT');
+
+                      return (
+                        <tr key={t.id || t.employeeId} className="even:bg-slate-50/50">
+                          <td className="py-2 px-2.5 border-r border-slate-300 text-center font-mono text-slate-500">{idx + 1}</td>
+                          <td className="py-2 px-2.5 border-r border-slate-300 font-bold text-slate-900">{t.name}</td>
+                          <td className="py-2 px-2.5 border-r border-slate-300 font-mono text-slate-700">{t.employeeId}</td>
+                          <td className="py-2 px-2.5 border-r border-slate-300 text-slate-700">{t.department || 'Academic Faculty'}</td>
+                          <td className="py-2 px-2.5 border-r border-slate-300 font-mono font-medium text-slate-800">
+                            {rec?.checkInTime || '--:--'}
+                          </td>
+                          <td className="py-2 px-2.5 border-r border-slate-300 font-bold">
+                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase ${
+                              isPres 
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : (isLate ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800')
+                            }`}>
+                              {statusText}
+                            </span>
+                          </td>
+                          <td className="py-2 px-2.5 text-[11px] text-slate-600">
+                            {rec ? (rec.checkInMethod === 'qr' ? 'QR Terminal Scan' : 'Direct Link / Manual') : 'Awaiting Arrival'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Official Signatures & Verification Block */}
+              <div className="pt-6 border-t-2 border-slate-300 grid grid-cols-2 gap-8 text-xs">
+                <div>
+                  <p className="font-bold text-slate-800 mb-6">Attendance Officer Verification:</p>
+                  <div className="border-b border-slate-400 w-48 pb-1 text-slate-700 font-semibold">{currentUser.name}</div>
+                  <p className="text-[10px] text-slate-500 mt-1">Signature & Date</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-slate-800 mb-6">Academic Administration Stamp:</p>
+                  <div className="border-b border-slate-400 w-48 ml-auto pb-1 text-slate-700 font-semibold">{schoolName}</div>
+                  <p className="text-[10px] text-slate-500 mt-1">Authorized Seal</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

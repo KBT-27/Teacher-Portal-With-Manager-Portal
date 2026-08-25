@@ -55,6 +55,7 @@ import {
   storage
 } from './lib/storage';
 import { hashPassword } from './lib/utils';
+import { audioAlerts } from './lib/audioAlerts';
 
 // UI Components
 import { LoginView } from './components/LoginView';
@@ -85,8 +86,17 @@ import { SettingsView } from './components/SettingsView';
 import { ProfileView } from './components/ProfileView';
 
 export function App() {
-  const todayDateStr = '2026-08-21';
-  const todayDateFormatted = 'August 21, 2026';
+  const getTodayDateInfo = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const formatted = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    return { dateStr, formatted };
+  };
+
+  const { dateStr: todayDateStr, formatted: todayDateFormatted } = getTodayDateInfo();
 
   // Primary State
   const [currentUser, setCurrentUser] = useState<TeacherUser | null>(() => loadCurrentUser());
@@ -117,15 +127,14 @@ export function App() {
     return 'dashboard';
   });
 
-  // Ensure QR station role or locked station stays exclusively on qr_station tab
+  const [stationSubTab, setStationSubTab] = useState<
+    'broadcast' | 'roster' | 'manual' | 'announcements' | 'reports' | 'settings' | 'profile'
+  >('broadcast');
+
+  // Ensure QR station role stays on qr_station tab
   useEffect(() => {
     if (currentUser?.role === 'qr_station' && activeTab !== 'qr_station') {
       setActiveTab('qr_station');
-    } else if (
-      currentUser?.role === 'teacher' && 
-      ['students', 'assignments', 'submissions', 'grades'].includes(activeTab)
-    ) {
-      setActiveTab('dashboard');
     }
   }, [currentUser, activeTab]);
 
@@ -381,6 +390,13 @@ export function App() {
     }
     const isLate = elapsedMinutes > lateThresholdMinutes || isLateByClock;
 
+    // Trigger audible alert specifically for Late scans, or pleasant chime for On-Time
+    if (isLate) {
+      audioAlerts.playLateAlertTone();
+    } else {
+      audioAlerts.playPresentChime();
+    }
+
     const newAttendanceSession: AttendanceSession = {
       id: `att-${Date.now()}`,
       teacherId: currentUser.employeeId || currentUser.id,
@@ -399,12 +415,25 @@ export function App() {
     return true;
   };
 
-  // Academic Manager Manual Attendance Override
+  // Academic Manager & Station Manual Attendance Override
   const handleManualMarkTeacher = (teacherId: string, status: 'present' | 'late' | 'absent') => {
-    if (currentUser?.role !== 'manager') return;
+    if (currentUser?.role !== 'manager' && currentUser?.role !== 'qr_station') return;
 
     const teacher = users.find(u => u.employeeId === teacherId || u.id === teacherId);
     if (!teacher) return;
+
+    // Trigger tone on manual mark as well
+    if (status === 'late') {
+      audioAlerts.playLateAlertTone();
+    } else if (status === 'present') {
+      audioAlerts.playPresentChime();
+    }
+
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+    const realLiveTime = `${hours}:${minutes} ${ampm}`;
 
     const existingIndex = attendanceRecords.findIndex(
       r => r.date === todayDateStr && (r.teacherId === teacher.employeeId || r.teacherName === teacher.name)
@@ -415,9 +444,9 @@ export function App() {
       updated[existingIndex] = {
         ...updated[existingIndex],
         status,
-        checkInTime: status === 'absent' ? '' : updated[existingIndex].checkInTime || '08:15 AM',
+        checkInTime: status === 'absent' ? '' : realLiveTime,
         checkInMethod: 'manual',
-        note: 'Updated by Academic Manager Manual Override'
+        note: `Marked ${status.toUpperCase()} via Manual Override at ${realLiveTime}`
       };
       setAttendanceRecords(updated);
     } else {
@@ -426,10 +455,10 @@ export function App() {
         teacherId: teacher.employeeId || teacher.id,
         teacherName: teacher.name,
         date: todayDateStr,
-        checkInTime: status === 'absent' ? '' : '08:15 AM',
+        checkInTime: status === 'absent' ? '' : realLiveTime,
         checkInMethod: 'manual',
         status,
-        note: 'Marked by Academic Manager Manual Override'
+        note: `Marked ${status.toUpperCase()} via Manual Override at ${realLiveTime}`
       };
       setAttendanceRecords([newRec, ...attendanceRecords]);
     }
@@ -599,6 +628,10 @@ export function App() {
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         isStationLocked={isStationLocked}
         schoolName={schoolName}
+        activeStationTab={stationSubTab}
+        onSelectStationTab={setStationSubTab}
+        facultyCount={users.filter(u => u.role === 'teacher').length}
+        announcementCount={announcements.length}
       />
 
       {/* Main View Area */}
@@ -715,6 +748,11 @@ export function App() {
               attendanceRules={attendanceRules}
               onSaveAttendanceRules={setAttendanceRules}
               onUpdateBroadcastQR={setBroadcastQR}
+              announcements={announcements}
+              onSaveAnnouncements={setAnnouncements}
+              onUpdateProfile={handleUpdateProfile}
+              activeStationTab={stationSubTab}
+              onSelectStationTab={setStationSubTab}
             />
           )}
 
@@ -740,6 +778,7 @@ export function App() {
               allAttendanceRecords={attendanceRecords}
               teachers={users}
               broadcastQR={broadcastQR}
+              attendanceRules={attendanceRules}
               onOpenScanner={() => setIsScannerOpen(true)}
               onScanSuccess={handleScanAttendance}
               alreadyScannedToday={hasTeacherScannedToday}
@@ -881,6 +920,7 @@ export function App() {
         alreadyScannedToday={hasTeacherScannedToday}
         todayDateFormatted={todayDateFormatted}
         activeBroadcastQR={broadcastQR}
+        attendanceRules={attendanceRules}
       />
 
       {/* Feedback to Academic Manager Modal */}

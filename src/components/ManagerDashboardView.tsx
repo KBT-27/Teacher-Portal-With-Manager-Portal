@@ -208,27 +208,21 @@ export const ManagerDashboardView: React.FC<ManagerDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Password Reset Requests Queue Metric */}
+        {/* Quick Departments & System Metric */}
         <div 
-          onClick={() => onNavigateTab('manager_password_resets')}
-          className={`p-5 rounded-2xl border shadow-xs transition-all cursor-pointer hover:shadow-md ${
-            pendingPasswordResets.length > 0 
-              ? 'bg-rose-50/70 border-rose-300 ring-2 ring-rose-400/20 hover:bg-rose-100/70' 
-              : 'bg-white border-slate-200 hover:bg-slate-50'
-          }`}
+          onClick={() => onNavigateTab('manager_departments')}
+          className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:bg-slate-50 transition-all cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Forgetting Requests</span>
-            <KeyRound className={`w-4 h-4 ${pendingPasswordResets.length > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Departments</span>
+            <Building2 className="w-4 h-4 text-amber-600" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className={`text-3xl font-black font-mono ${pendingPasswordResets.length > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
-              {pendingPasswordResets.length}
+            <span className="text-3xl font-black font-mono text-slate-900">
+              {departments.length}
             </span>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-              pendingPasswordResets.length > 0 ? 'text-rose-700 bg-rose-100' : 'text-slate-500 bg-slate-100'
-            }`}>
-              {pendingPasswordResets.length > 0 ? 'Approval Needed' : 'All Clear'}
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full text-blue-700 bg-blue-50">
+              Active Faculties
             </span>
           </div>
         </div>
@@ -392,158 +386,6 @@ export const ManagerDashboardView: React.FC<ManagerDashboardViewProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Review & Authorize Password Reset Modal */}
-      {selectedResetRequest && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
-                  <KeyRound className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900">
-                    Authorize Password Reset
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Academic Manager Sole Approval Authorization
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedResetRequest(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-800 font-black flex items-center justify-center border border-blue-200 text-sm">
-                    {String(selectedResetRequest.teacherName || 'T').charAt(0)}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{typeof selectedResetRequest.teacherName === 'string' ? selectedResetRequest.teacherName : 'Faculty'}</h4>
-                    <p className="font-mono text-indigo-700 font-bold">{typeof selectedResetRequest.teacherId === 'string' ? selectedResetRequest.teacherId : ''}</p>
-                  </div>
-                </div>
-                <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full font-bold text-[10px] uppercase">
-                  Pending Authorization
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Registered Email:</span>
-                  <p className="text-slate-800 truncate font-medium" title={typeof selectedResetRequest.email === 'string' ? selectedResetRequest.email : ''}>
-                    {typeof selectedResetRequest.email === 'string' ? selectedResetRequest.email : ''}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Department:</span>
-                  <p className="text-slate-800 font-medium">
-                    {typeof selectedResetRequest.department === 'string' ? selectedResetRequest.department : 'Faculty'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Wish Note / Reason provided by Teacher */}
-              <div className="pt-2 border-t border-slate-200/60 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Teacher's Reason / Note:</span>
-                <p className="text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200 italic">
-                  "{selectedResetRequest.reason || 'Password reset requested via School Entrance Portal'}"
-                </p>
-              </div>
-
-              {/* Teacher's Desired Password if specified */}
-              {selectedResetRequest.requestedNewPassword && (
-                <div className="pt-1 flex items-center justify-between bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/70">
-                  <div>
-                    <span className="text-[10px] font-bold text-blue-700 uppercase">Teacher's Desired Password:</span>
-                    <p className="font-mono font-bold text-blue-900 text-xs">{selectedResetRequest.requestedNewPassword}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setCustomApprovalPassword(selectedResetRequest.requestedNewPassword || '')}
-                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[11px] cursor-pointer"
-                  >
-                    Use Teacher Password
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleConfirmApproval} className="space-y-4 text-xs">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="font-bold text-slate-700">
-                    Approved Password to Assign to Profile *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$';
-                      let res = '';
-                      for (let i = 0; i < 10; i++) {
-                        res += chars.charAt(Math.floor(Math.random() * chars.length));
-                      }
-                      setCustomApprovalPassword(res);
-                    }}
-                    className="text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
-                  >
-                    ✨ Auto-Generate
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  required
-                  value={customApprovalPassword}
-                  onChange={(e) => setCustomApprovalPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  This password will be updated directly in the faculty member's profile.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onRejectPasswordReset && selectedResetRequest) {
-                      onRejectPasswordReset(selectedResetRequest.id, 'Declined by Academic Manager');
-                      setActionSuccessMsg(`Declined password reset for ${selectedResetRequest.teacherName}.`);
-                      setSelectedResetRequest(null);
-                    }
-                  }}
-                  className="px-3.5 py-2 text-rose-600 hover:bg-rose-50 border border-rose-200 font-bold rounded-xl cursor-pointer"
-                >
-                  Decline Request
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedResetRequest(null)}
-                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 font-semibold rounded-xl cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md cursor-pointer"
-                  >
-                    Approve & Save Password
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

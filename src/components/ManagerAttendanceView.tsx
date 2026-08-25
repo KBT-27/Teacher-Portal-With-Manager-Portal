@@ -69,7 +69,7 @@ export const ManagerAttendanceView: React.FC<ManagerAttendanceViewProps> = ({
     broadcastTarget: 'single_kiosk_device',
     targetDeviceName: 'School Entrance Terminal (Device #1)'
   },
-  onSaveAttendanceRules = () => {},
+  onSaveAttendanceRules = (_rules: AttendanceTimeSettings) => {},
   onUpdateBroadcastQR,
   currentUser
 }) => {

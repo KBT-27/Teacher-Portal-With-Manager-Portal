@@ -6,7 +6,8 @@ import {
   Calendar, 
   Pin, 
   CheckCircle2,
-  Edit3
+  Edit3,
+  Search
 } from 'lucide-react';
 import { Announcement, TeacherUser } from '../types';
 
@@ -22,6 +23,7 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
   onSaveAnnouncements
 }) => {
   const isManager = currentUser.role === 'manager';
+  const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Announcement | null>(null);
   const [title, setTitle] = useState('');
@@ -140,9 +142,27 @@ export const AnnouncementsView: React.FC<AnnouncementsViewProps> = ({
         )}
       </div>
 
+      {/* Search Bar */}
+      <div className="relative max-w-md">
+        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search announcements by title, content, or author..."
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
+        />
+      </div>
+
       {/* Announcements List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {announcements.map((item) => (
+        {announcements
+          .filter(a => 
+            a.title.toLowerCase().includes(search.toLowerCase()) ||
+            a.content.toLowerCase().includes(search.toLowerCase()) ||
+            (a.author || '').toLowerCase().includes(search.toLowerCase())
+          )
+          .map((item) => (
           <div
             key={item.id}
             className={`rounded-3xl p-6 border shadow-xs transition-all flex flex-col justify-between ${

@@ -51,6 +51,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     onConfirm: () => {}
   });
 
+  const [deptComplianceList, setDeptComplianceList] = useState([
+    { name: 'Mathematics & STEM', rate: 98, faculty: 6 },
+    { name: 'Physical Sciences & Chemistry', rate: 96, faculty: 5 },
+    { name: 'Languages & Humanities', rate: 94, faculty: 4 },
+    { name: 'Fine Arts & Physical Ed', rate: 95, faculty: 3 }
+  ]);
+
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
@@ -94,6 +101,42 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       onConfirm: () => {
         onClearAttendance();
         showToast(`Analytical Insights for ${schoolName} cleared successfully.`);
+      }
+    });
+  };
+
+  // Erase Departmental Compliance Overview
+  const handleTriggerClearCompliance = () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: `Erase Departmental Compliance Overview • ${schoolName}`,
+      message: `Are you sure you want to erase and reset all Departmental Compliance benchmarks and statistics? This will reset all compliance indicators to zero.`,
+      confirmText: 'Yes, Erase Compliance Overview',
+      cancelText: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        setDeptComplianceList(prev => prev.map(d => ({ ...d, rate: 0, faculty: 0 })));
+        showToast('Departmental Compliance Overview erased and reset successfully.');
+      }
+    });
+  };
+
+  // Erase Attendance Audit Records
+  const handleTriggerClearAuditRecords = () => {
+    if (!onClearAttendance) {
+      showToast('Attendance audit records reset successfully.');
+      return;
+    }
+    setConfirmDialog({
+      isOpen: true,
+      title: `Erase Attendance Audit Records • ${schoolName}`,
+      message: `Are you sure you want to permanently erase and clear all Attendance Audit Records? This action cannot be undone.`,
+      confirmText: 'Yes, Erase Audit Records',
+      cancelText: 'Cancel',
+      variant: 'danger',
+      onConfirm: () => {
+        onClearAttendance();
+        showToast('Attendance Audit Records erased successfully.');
       }
     });
   };
@@ -216,16 +259,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* Breakdown Overview - Show only for Managers */}
       {!isTeacher && (
         <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
-          <h3 className="text-base font-black text-slate-900">Departmental Compliance Overview</h3>
-          <p className="text-xs text-slate-500">Attendance punctuality across academic departments</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-black text-slate-900">Departmental Compliance Overview</h3>
+              <p className="text-xs text-slate-500">Attendance punctuality across academic departments</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleTriggerClearCompliance}
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-rose-200 flex items-center gap-1.5 text-xs font-bold"
+              title="Erase Departmental Compliance Overview"
+            >
+              <Trash2 className="w-4 h-4 text-rose-500" />
+              <span className="hidden sm:inline text-rose-600">Erase Compliance</span>
+            </button>
+          </div>
 
           <div className="space-y-3 pt-2">
-            {[
-              { name: 'Mathematics & STEM', rate: 98, faculty: 6 },
-              { name: 'Physical Sciences & Chemistry', rate: 96, faculty: 5 },
-              { name: 'Languages & Humanities', rate: 94, faculty: 4 },
-              { name: 'Fine Arts & Physical Ed', rate: 95, faculty: 3 }
-            ].map((dept, idx) => (
+            {deptComplianceList.map((dept, idx) => (
               <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
                 <div>
                   <h4 className="text-xs font-bold text-slate-900">{dept.name}</h4>
@@ -246,9 +297,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* Attendance Audit Log Table */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-black text-slate-900">Attendance Audit Records</h3>
-            <p className="text-xs text-slate-500">Search, verify, or audit individual teacher attendance entries</p>
+          <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
+            <div>
+              <h3 className="text-base font-black text-slate-900">Attendance Audit Records</h3>
+              <p className="text-xs text-slate-500">Search, verify, or audit individual teacher attendance entries</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleTriggerClearAuditRecords}
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-rose-200 flex items-center gap-1.5 text-xs font-bold shrink-0"
+              title="Erase Attendance Audit Records"
+            >
+              <Trash2 className="w-4 h-4 text-rose-500" />
+              <span className="hidden sm:inline text-rose-600">Erase Audit Records</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">

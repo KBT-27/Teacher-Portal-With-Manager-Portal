@@ -51,7 +51,7 @@ export const SchoolEntranceKioskModal: React.FC<SchoolEntranceKioskModalProps> =
   schoolName = 'EduSchool International Academy',
   onRegenerateQR,
   onPostTodayQR,
-  onRevokeQR: _onRevokeQR,
+  onRevokeQR,
   token,
   countdown,
   isManager = false,
@@ -325,6 +325,7 @@ export const SchoolEntranceKioskModal: React.FC<SchoolEntranceKioskModalProps> =
             const lateMin = broadcastQR?.lateAfterMinutes !== undefined
               ? broadcastQR.lateAfterMinutes
               : (attendanceRules?.lateAfterMinutes ?? 15);
+            const lateTimeStr = broadcastQR?.lateTime || attendanceRules?.lateTime || '08:15';
             const stopT = broadcastQR?.stopTime || attendanceRules?.stopTime || '09:30';
 
             return (
@@ -360,7 +361,7 @@ export const SchoolEntranceKioskModal: React.FC<SchoolEntranceKioskModalProps> =
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                    <span><strong>Late:</strong> after {lateMin} minutes but before the session closes ({stopT}).</span>
+                    <span><strong>Late:</strong> after {lateMin} minutes ({lateTimeStr}) but before the session closes ({stopT}).</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />

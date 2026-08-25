@@ -35,9 +35,9 @@ export const ManagerTeachersView: React.FC<ManagerTeachersViewProps> = ({
   teachers,
   departments,
   onSaveTeachers,
-  passwordResets: _passwordResets = [],
-  onApprovePasswordReset: _onApprovePasswordReset,
-  onRejectPasswordReset: _onRejectPasswordReset
+  passwordResets = [],
+  onApprovePasswordReset,
+  onRejectPasswordReset
 }) => {
   const [search, setSearch] = useState('');
   const [selectedDept, setSelectedDept] = useState('All');
@@ -47,6 +47,11 @@ export const ManagerTeachersView: React.FC<ManagerTeachersViewProps> = ({
   const [activePasswordModalTeacher, setActivePasswordModalTeacher] = useState<TeacherUser | null>(null);
   const [directNewPassword, setDirectNewPassword] = useState('');
   const [visiblePasswordTeacherIds, setVisiblePasswordTeacherIds] = useState<Record<string, boolean>>({});
+
+  // Password reset modal state
+  const [selectedResetReq, setSelectedResetReq] = useState<PasswordResetRequest | null>(null);
+  const [quickApprovedPass, setQuickApprovedPass] = useState('');
+  const [showPasswordInModal, setShowPasswordInModal] = useState(false);
 
   const toggleTeacherPasswordVisibility = (teacherId: string) => {
     setVisiblePasswordTeacherIds(prev => ({

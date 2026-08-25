@@ -279,6 +279,51 @@ export const LoginView: React.FC<LoginViewProps> = ({
             </button>
           </form>
 
+          {/* Quick Demo Access Badges */}
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-[11px] font-semibold text-slate-500 mb-2.5 text-center">
+              Quick Fill Credentials for Testing:
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                id="quick-login-manager"
+                onClick={() => {
+                  setEmployeeId('Manager');
+                  setPassword('Manager 123');
+                }}
+                className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl text-[11px] font-medium border border-indigo-200 transition-colors text-center cursor-pointer"
+              >
+                <span className="font-bold block">Manager</span>
+                <span className="text-[9px] text-indigo-600 font-mono">Manager 123</span>
+              </button>
+              <button
+                type="button"
+                id="quick-login-teacher"
+                onClick={() => {
+                  setEmployeeId('TCH-8492');
+                  setPassword('teach123');
+                }}
+                className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-[11px] font-medium border border-emerald-200 transition-colors text-center cursor-pointer"
+              >
+                <span className="font-bold block">Teacher</span>
+                <span className="text-[9px] text-emerald-600 font-mono">teach123</span>
+              </button>
+              <button
+                type="button"
+                id="quick-login-qr"
+                onClick={() => {
+                  setEmployeeId('Qr Code');
+                  setPassword('Qr code 123');
+                }}
+                className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-[11px] font-medium border border-amber-200 transition-colors text-center cursor-pointer"
+              >
+                <span className="font-bold block">QR Station</span>
+                <span className="text-[9px] text-amber-600 font-mono">Qr code 123</span>
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

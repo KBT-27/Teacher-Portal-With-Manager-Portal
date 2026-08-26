@@ -117,22 +117,7 @@ export function saveSchoolName(name: string) {
 }
 
 export function getSavedUser(): TeacherUser | null {
-  try {
-    const raw = localStorage.getItem(CURRENT_USER_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && parsed.id) {
-        const realPwd = getTeacherRealPassword(parsed);
-        return {
-          ...parsed,
-          rawPassword: parsed.rawPassword || realPwd,
-          currentPassword: parsed.currentPassword || parsed.rawPassword || realPwd
-        };
-      }
-    }
-  } catch (e) {
-    console.error(e);
-  }
+  // Always require fresh urgent authentication when opening or reloading the web portal
   return null;
 }
 
@@ -474,12 +459,47 @@ export function getSavedAssignments(): Assignment[] {
     const raw = localStorage.getItem(ASSIGNMENTS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (e) {
     console.error(e);
   }
-  return [];
+  return [
+    {
+      id: 'asg-demo-1',
+      title: 'Term 1 Course Syllabus & Lesson Schedule Submission',
+      description: 'Submit your complete 16-week curriculum syllabus, weekly teaching calendar, and lab session breakdown for approval.',
+      subject: 'Curriculum & Instruction',
+      targetTeacherType: 'all',
+      targetTeacherId: 'All',
+      targetTeacherName: 'All Teachers',
+      evaluationType: 'accept_reject',
+      dueDate: '2026-09-15',
+      postedDate: '2026-08-20',
+      submissionsCount: 1,
+      totalStudents: 15,
+      status: 'active',
+      createdBy: 'Academic Manager'
+    },
+    {
+      id: 'asg-demo-2',
+      title: 'Midterm Science Lab Safety & Inventory Audit',
+      description: 'Conduct inspection of chemistry/physics lab equipment, record consumable stock, and submit safety sign-off sheet.',
+      subject: 'Science & STEM',
+      targetTeacherType: 'specific',
+      targetTeacherId: 'TCH-001',
+      targetTeacherName: 'Samuel Asfaw',
+      evaluationType: 'points',
+      maxPoints: 10,
+      totalPoints: 10,
+      dueDate: '2026-09-10',
+      postedDate: '2026-08-21',
+      submissionsCount: 1,
+      totalStudents: 1,
+      status: 'active',
+      createdBy: 'Academic Manager'
+    }
+  ];
 }
 
 export function saveAssignments(assignments: Assignment[]) {
@@ -497,12 +517,53 @@ export function getSavedSubmissions(): AssignmentSubmission[] {
     const raw = localStorage.getItem(SUBMISSIONS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (e) {
     console.error(e);
   }
-  return [];
+  return [
+    {
+      id: 'sub-demo-1',
+      assignmentId: 'asg-demo-1',
+      assignmentTitle: 'Term 1 Course Syllabus & Lesson Schedule Submission',
+      teacherName: 'Samuel Asfaw',
+      teacherId: 'TCH-001',
+      studentName: 'Samuel Asfaw',
+      studentId: 'TCH-001',
+      submittedAt: 'Aug 21, 2026, 09:30 AM',
+      submissionMethod: 'online',
+      evaluationType: 'accept_reject',
+      status: 'accepted',
+      managerFeedback: 'Syllabus aligns with regional standards. Approved for Term 1.',
+      feedback: 'Syllabus aligns with regional standards. Approved for Term 1.',
+      reviewedAt: 'Aug 21, 2026, 11:00 AM',
+      reviewedBy: 'Academic Manager',
+      submissionText: 'Attached full Term 1 Mathematics 10th grade syllabus and exam breakdown schedule.',
+      fileName: 'Grade10_Math_Syllabus_2026.pdf'
+    },
+    {
+      id: 'sub-demo-2',
+      assignmentId: 'asg-demo-2',
+      assignmentTitle: 'Midterm Science Lab Safety & Inventory Audit',
+      teacherName: 'Samuel Asfaw',
+      teacherId: 'TCH-001',
+      studentName: 'Samuel Asfaw',
+      studentId: 'TCH-001',
+      submittedAt: 'Aug 22, 2026, 02:15 PM',
+      submissionMethod: 'in_person',
+      evaluationType: 'points',
+      maxScore: 10,
+      score: 10,
+      status: 'graded',
+      managerFeedback: 'Excellent lab inventory report. All safety measures verified in person.',
+      feedback: 'Excellent lab inventory report. All safety measures verified in person.',
+      reviewedAt: 'Aug 22, 2026, 03:00 PM',
+      reviewedBy: 'Academic Manager',
+      submissionText: 'Delivered signed physical safety log and equipment calibration check to School Manager office.',
+      fileName: 'Lab_Safety_Checklist_Signed.pdf'
+    }
+  ];
 }
 
 export function saveSubmissions(submissions: AssignmentSubmission[]) {

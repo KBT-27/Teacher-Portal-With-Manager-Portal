@@ -212,37 +212,54 @@ export interface Assignment {
   id: string;
   title: string;
   classId?: string;
-  className: string;
-  subject: string;
+  className?: string;
+  subject?: string;
   dueDate: string;
+  postedDate?: string;
+  targetTeacherType?: 'all' | 'specific';
+  targetTeacherId?: string; // "All" or teacher employeeId/id
+  targetTeacherName?: string; // "All Teachers" or teacher name
+  evaluationType?: 'accept_reject' | 'points';
+  maxPoints?: number;
+  totalPoints?: number;
+  description?: string;
   status?: 'active' | 'closed' | 'draft' | string;
   submittedCount?: number;
   submissionsCount?: number;
   totalStudents?: number;
-  maxScore?: number;
-  totalPoints?: number;
-  description?: string;
+  createdBy?: string;
 }
 
 export type AssignmentItem = Assignment;
 
 export type AssignmentSubmission = {
   id: string;
-  assignmentId?: string;
+  assignmentId: string;
   assignmentTitle: string;
-  studentId?: string;
-  studentName: string;
-  studentAvatar?: string;
+  teacherId?: string;
+  teacherName: string;
+  teacherEmail?: string;
+  teacherDepartment?: string;
   submittedAt?: string;
   submittedDate?: string;
+  submissionText?: string;
+  submissionMethod?: 'online' | 'in_person';
   fileName?: string;
-  status?: 'pending' | 'graded' | 'Submitted' | 'Pending Review' | string;
+  fileUrl?: string;
+  evaluationType?: 'accept_reject' | 'points';
+  status?: 'pending' | 'accepted' | 'rejected' | 'graded' | 'Submitted' | 'Pending Review' | string;
   score?: number;
+  maxScore?: number;
   totalScore?: number;
+  managerFeedback?: string;
+  feedback?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
   className?: string;
   classGrade?: string;
-  feedback?: string;
-  fileUrl?: string;
+  studentId?: string;
+  studentName?: string;
+  studentAvatar?: string;
 };
 
 export type SubmissionItem = AssignmentSubmission;
@@ -285,7 +302,10 @@ export type NavTab =
   | 'messages'
   | 'profile'
   | 'assignments'
+  | 'my_tasks'
+  | 'teacher_tasks'
   | 'submissions'
+  | 'teacher_submissions'
   | 'grades'
   | 'exams'
   | 'reports'

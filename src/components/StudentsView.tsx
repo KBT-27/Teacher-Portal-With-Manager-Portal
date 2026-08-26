@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   GraduationCap, 
   Search, 
@@ -7,9 +7,13 @@ import {
   CheckCircle2, 
   Mail, 
   Phone,
-  BookOpen
+  BookOpen,
+  Download,
+  Upload,
+  FileSpreadsheet
 } from 'lucide-react';
 import { StudentItem, ClassItem, TeacherUser } from '../types';
+import { exportToCSV, exportToJSON, parseCSV } from '../lib/csvExportImport';
 
 interface StudentsViewProps {
   currentUser?: TeacherUser;
@@ -28,6 +32,7 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [search, setSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [studentId, setStudentId] = useState('');
@@ -35,9 +40,70 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
   const [grade, setGrade] = useState('Grade 10');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleExportCSV = () => {
+    exportToCSV(students, `enrolled_students_${new Date().toISOString().split('T')[0]}`, [
+      { key: 'id', label: 'ID' },
+      { key: 'name', label: 'Full Name' },
+      { key: 'studentId', label: 'Student ID' },
+      { key: 'className', label: 'Class' },
+      { key: 'grade', label: 'Grade' },
+      { key: 'email', label: 'Email' },
+      { key: 'averageGrade', label: 'Standing' },
+      { key: 'attendanceRate', label: 'Attendance %' }
+    ]);
+    showToast('Students roster exported to CSV.');
+  };
+
+  const handleExportJSON = () => {
+    exportToJSON(students, `enrolled_students_${new Date().toISOString().split('T')[0]}`);
+    showToast('Students roster exported to JSON.');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        let importedList: StudentItem[] = [];
+
+        if (file.name.endsWith('.json')) {
+          const parsed = JSON.parse(text);
+          importedList = Array.isArray(parsed) ? parsed : [parsed];
+        } else {
+          const rows = parseCSV(text);
+          importedList = rows.map((r, i) => ({
+            id: r['ID'] || r['id'] || `stu-imp-${Date.now()}-${i}`,
+            name: r['Full Name'] || r['name'] || 'Student',
+            studentId: r['Student ID'] || r['studentId'] || `STU-${Math.floor(1000 + Math.random() * 9000)}`,
+            className: r['Class'] || r['className'] || classes[0]?.name || 'General Grade 10',
+            grade: r['Grade'] || r['grade'] || 'Grade 10',
+            email: r['Email'] || r['email'] || 'student@eduschool.edu',
+            averageGrade: r['Standing'] || r['averageGrade'] || 'A',
+            attendanceRate: Number(r['Attendance %'] || r['attendanceRate']) || 98,
+            avatarUrl: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`
+          }));
+        }
+
+        if (importedList.length > 0) {
+          onSaveStudents([...students, ...importedList]);
+          showToast(`Successfully imported ${importedList.length} students!`);
+          setIsImportModalOpen(false);
+        }
+      } catch (err) {
+        alert('Failed to parse file. Please verify CSV or JSON structure.');
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleOpenAdd = () => {
@@ -118,13 +184,39 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Student</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
+            title="Export CSV"
+          >
+            <Download className="w-3.5 h-3.5 text-blue-600" />
+            <span>Export CSV</span>
+          </button>
+          <button
+            onClick={handleExportJSON}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
+            title="Export JSON"
+          >
+            <Download className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Export JSON</span>
+          </button>
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
+            title="Import Students"
+          >
+            <Upload className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Import</span>
+          </button>
+          <button
+            onClick={handleOpenAdd}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Student</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -307,6 +399,51 @@ export const StudentsView: React.FC<StudentsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT MODAL */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-base font-bold text-slate-900">Import Enrolled Students</h3>
+              </div>
+              <button onClick={() => setIsImportModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Upload a <strong>.csv</strong> or <strong>.json</strong> file containing student records to import into the roster.
+            </p>
+
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="p-8 border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-2xl text-center bg-slate-50 hover:bg-blue-50/50 transition-all cursor-pointer space-y-2"
+            >
+              <Upload className="w-8 h-8 text-blue-600 mx-auto" />
+              <div className="text-xs font-bold text-slate-700">Click to browse or drag file here</div>
+              <div className="text-[10px] text-slate-400">Supports .csv or .json files</div>
+            </div>
+
+            <input 
+              ref={fileInputRef}
+              type="file" 
+              accept=".csv,.json" 
+              onChange={handleFileUpload} 
+              className="hidden" 
+            />
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

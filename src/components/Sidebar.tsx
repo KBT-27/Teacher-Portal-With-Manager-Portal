@@ -239,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   <div className="flex items-center space-x-2.5">
                     <FileText className="w-4 h-4" />
-                    <span>Assignments</span>
+                    <span>Assignments & Tasks</span>
                   </div>
                 </button>
 
@@ -251,19 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   <div className="flex items-center space-x-2.5">
                     <UserCheck className="w-4 h-4" />
-                    <span>Submissions</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleTabClick('grades')}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'grades' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Award className="w-4 h-4" />
-                    <span>Grades & Report Cards</span>
+                    <span>Teacher Submissions & Reviews</span>
                   </div>
                 </button>
 
@@ -484,19 +472,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   <div className="flex items-center space-x-2.5">
                     <BookOpen className="w-4 h-4" />
-                    <span>Classes</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleTabClick('students')}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'students' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <GraduationCap className="w-4 h-4" />
-                    <span>Students</span>
+                    <span>Assigned Classes</span>
                   </div>
                 </button>
 
@@ -508,43 +484,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   <div className="flex items-center space-x-2.5">
                     <Calendar className="w-4 h-4" />
-                    <span>Schedule</span>
+                    <span>Teaching Schedule</span>
                   </div>
                 </button>
 
                 <button
-                  onClick={() => handleTabClick('assignments')}
+                  onClick={() => handleTabClick('my_tasks')}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'assignments' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    activeTab === 'my_tasks' || activeTab === 'teacher_tasks' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
                   <div className="flex items-center space-x-2.5">
                     <FileText className="w-4 h-4" />
-                    <span>Assignments</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleTabClick('submissions')}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'submissions' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <UserCheck className="w-4 h-4" />
-                    <span>Submissions</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleTabClick('grades')}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer ${
-                    activeTab === 'grades' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <Award className="w-4 h-4" />
-                    <span>Grades & Report Cards</span>
+                    <span>My Tasks & Assignments</span>
                   </div>
                 </button>
 

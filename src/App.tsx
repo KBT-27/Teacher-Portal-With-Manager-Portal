@@ -79,6 +79,7 @@ import { StudentsView } from './components/StudentsView';
 import { TimetableScheduleView } from './components/TimetableScheduleView';
 import { AssignmentsView } from './components/AssignmentsView';
 import { SubmissionsView } from './components/SubmissionsView';
+import { TeacherTasksView } from './components/TeacherTasksView';
 import { GradesView } from './components/GradesView';
 import { MaterialsView } from './components/MaterialsView';
 import { ReportsView } from './components/ReportsView';
@@ -98,8 +99,8 @@ export function App() {
 
   const { dateStr: todayDateStr, formatted: todayDateFormatted } = getTodayDateInfo();
 
-  // Primary State
-  const [currentUser, setCurrentUser] = useState<TeacherUser | null>(() => loadCurrentUser());
+  // Primary State - Security: Always require urgent login first on initial URL opening or reload
+  const [currentUser, setCurrentUser] = useState<TeacherUser | null>(null);
   const [users, setUsers] = useState<TeacherUser[]>(() => loadUsers());
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceSession[]>(() => loadAttendanceRecords());
   const [departments, setDepartments] = useState<Department[]>(() => loadDepartments());
@@ -118,14 +119,8 @@ export function App() {
   const [isAutoCreateQREnabled, setIsAutoCreateQREnabled] = useState<boolean>(() => storage.getAutoCreateQREnabled());
   const [schoolName, setSchoolName] = useState<string>(() => getSavedSchoolName());
 
-  // Active Tab & Navigation
-  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
-    const user = loadCurrentUser();
-    if (!user) return 'login';
-    if (user.role === 'manager') return 'manager_dashboard';
-    if (user.role === 'qr_station') return 'qr_station';
-    return 'dashboard';
-  });
+  // Active Tab & Navigation - Start strictly at login for security
+  const [activeTab, setActiveTab] = useState<ActiveTab>('login');
 
   const [stationSubTab, setStationSubTab] = useState<
     'broadcast' | 'roster' | 'manual' | 'announcements' | 'reports' | 'settings' | 'profile'
@@ -815,11 +810,39 @@ export function App() {
             />
           )}
 
+          {activeTab === 'teacher_tasks' && currentUser && (
+            <TeacherTasksView
+              currentUser={currentUser}
+              assignments={assignments}
+              submissions={submissions}
+              onSubmitTask={(submissionData) => {
+                const newSub: SubmissionItem = {
+                  id: `sub-${Date.now()}`,
+                  assignmentId: submissionData.assignmentId,
+                  assignmentTitle: submissionData.assignmentTitle,
+                  teacherName: currentUser.name,
+                  teacherId: currentUser.employeeId || currentUser.id,
+                  studentName: currentUser.name,
+                  studentId: currentUser.employeeId || currentUser.id,
+                  submittedAt: new Date().toLocaleString(),
+                  submissionMethod: submissionData.submissionMethod,
+                  submissionText: submissionData.submissionText,
+                  fileName: submissionData.fileName,
+                  evaluationType: submissionData.evaluationType,
+                  maxScore: submissionData.maxPoints,
+                  status: 'pending'
+                };
+                setSubmissions(prev => [newSub, ...prev]);
+              }}
+            />
+          )}
+
           {activeTab === 'assignments' && (
             <AssignmentsView
               currentUser={currentUser}
               assignments={assignments}
               classes={classes}
+              teachers={users.filter(u => u.role === 'teacher')}
               onSaveAssignments={setAssignments}
             />
           )}
@@ -828,12 +851,43 @@ export function App() {
             <SubmissionsView
               currentUser={currentUser}
               submissions={submissions}
+              assignments={assignments}
+              teachers={users.filter(u => u.role === 'teacher')}
               onGradeSubmission={(id, score, feedback) => {
-                setSubmissions(prev => prev.map(s => s.id === id ? { ...s, score, feedback } : s));
+                setSubmissions(prev => prev.map(s => s.id === id ? { 
+                  ...s, 
+                  score, 
+                  feedback, 
+                  managerFeedback: feedback, 
+                  status: 'graded',
+                  reviewedAt: new Date().toLocaleString(),
+                  reviewedBy: currentUser?.name || 'Academic Manager'
+                } : s));
+              }}
+              onAcceptSubmission={(id, feedback) => {
+                setSubmissions(prev => prev.map(s => s.id === id ? { 
+                  ...s, 
+                  feedback, 
+                  managerFeedback: feedback, 
+                  status: 'accepted',
+                  reviewedAt: new Date().toLocaleString(),
+                  reviewedBy: currentUser?.name || 'Academic Manager'
+                } : s));
+              }}
+              onRejectSubmission={(id, feedback) => {
+                setSubmissions(prev => prev.map(s => s.id === id ? { 
+                  ...s, 
+                  feedback, 
+                  managerFeedback: feedback, 
+                  status: 'rejected',
+                  reviewedAt: new Date().toLocaleString(),
+                  reviewedBy: currentUser?.name || 'Academic Manager'
+                } : s));
               }}
               onDeleteSubmission={(id) => {
                 setSubmissions(prev => prev.filter(s => s.id !== id));
               }}
+              onSaveSubmissions={setSubmissions}
             />
           )}
 

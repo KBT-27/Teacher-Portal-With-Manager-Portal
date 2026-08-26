@@ -211,6 +211,21 @@ export const LoginView: React.FC<LoginViewProps> = ({
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 sm:px-8 rounded-3xl shadow-xl border border-slate-200/80 space-y-6">
           
+          <div className="flex items-center justify-between p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-700">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-amber-900 leading-tight">Protected Portal</p>
+                <p className="text-[11px] text-amber-700 leading-tight">Login required to proceed</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/60 text-amber-900 uppercase tracking-wider">
+              Auth Required
+            </span>
+          </div>
+
           {errorMsg && (
             <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
